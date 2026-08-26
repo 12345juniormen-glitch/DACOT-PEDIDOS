@@ -1,0 +1,112 @@
+{
+  "theme": "light",
+  "typography": {
+    "headings": {
+      "family": "Manrope, sans-serif",
+      "weights": ["600", "700", "800"],
+      "instructions": "Use Manrope for all headings to provide a clean, modern SaaS look. Ensure tight letter spacing (tracking-tight) for h1/h2."
+    },
+    "body": {
+      "family": "IBM Plex Sans, sans-serif",
+      "weights": ["400", "500", "600"],
+      "instructions": "Use IBM Plex Sans for body text, form inputs, labels, and tables. Prioritize high readability and clarity."
+    },
+    "scale": {
+      "h1": "text-2xl sm:text-3xl font-bold tracking-tight text-slate-900",
+      "h2": "text-xl sm:text-2xl font-semibold tracking-tight text-slate-800",
+      "h3": "text-lg font-medium text-slate-800",
+      "body": "text-sm text-slate-600",
+      "labels": "text-xs font-semibold uppercase tracking-wider text-slate-500"
+    }
+  },
+  "colors": {
+    "primary": "#ea580c",
+    "background": "#f8fafc",
+    "card": "#ffffff",
+    "text_main": "#0f172a",
+    "text_muted": "#64748b",
+    "borders": "#e2e8f0",
+    "css_variables_to_update": {
+      "light": {
+        "--background": "210 40% 98%",
+        "--foreground": "222 47% 11%",
+        "--card": "0 0% 100%",
+        "--card-foreground": "222 47% 11%",
+        "--popover": "0 0% 100%",
+        "--popover-foreground": "222 47% 11%",
+        "--primary": "24 95% 53%",
+        "--primary-foreground": "0 0% 100%",
+        "--secondary": "210 40% 96%",
+        "--secondary-foreground": "222 47% 11%",
+        "--muted": "210 40% 96%",
+        "--muted-foreground": "215 16% 47%",
+        "--accent": "24 95% 93%",
+        "--accent-foreground": "24 95% 40%",
+        "--destructive": "0 84% 60%",
+        "--destructive-foreground": "0 0% 98%",
+        "--border": "214 32% 91%",
+        "--input": "214 32% 91%",
+        "--ring": "24 95% 53%",
+        "--radius": "0.5rem"
+      }
+    }
+  },
+  "visual_enhancers": {
+    "shadows": "Use shadow-sm for cards. hover:shadow-md for interactive elements to provide subtle depth without visual clutter.",
+    "borders": "1px solid var(--border). Soft, clean lines. Avoid heavy borders to keep the minimalist visual.",
+    "radii": "rounded-lg (8px) for containers, cards, and inputs. rounded-full for avatars and badges.",
+    "surfaces": "Solid white backgrounds for cards to stand out on the slate-50 background. Avoid glassmorphism to maintain a professional, data-heavy SaaS feel."
+  },
+  "component_name": {
+    "Button": "Use primary orange for main CTAs (e.g., 'Criar Pedido'). Use outline/ghost variants for secondary actions.",
+    "Badge": "Order status badges MUST use distinct colors: 'Novo' (blue), 'Em preparo' (orange), 'Pronto' (green), 'Entregue' (slate), 'Cancelado' (red).",
+    "Card": "Use for metric summaries and order tickets. Maintain minimal padding (p-4 or p-6) with clear internal hierarchy.",
+    "Table": "Dense spacing for rows. Left-align text, right-align numbers and prices. Use for Products, Clients, and History.",
+    "Input/Select": "Clean borders, subtle focus ring (focus:ring-primary). Fast keyboard navigation.",
+    "Toast": "Use 'sonner' for notifications (Order created, status updated)."
+  },
+  "grids": {
+    "dashboard": "Use high density grid: grid-cols-1 md:grid-cols-2 lg:grid-cols-4 for top metrics. grid-cols-1 lg:grid-cols-3 for active orders layout.",
+    "orders_board": "Grid layout for active orders to quickly scan statuses (e.g. Kanban style columns or dense list view)."
+  },
+  "layouts": {
+    "app_shell": "Sidebar navigation (fixed left, w-64, clear separation via border-r) + Top header (user profile, search/actions) + Main scrollable content area.",
+    "page_header": "Flex row, justify-between, items-center. Left: Page Title (h1). Right: Primary actions (e.g., '+ Novo Pedido')."
+  },
+  "motion": {
+    "transitions": "Keep it highly functional. Use specific transitions: transition-colors duration-200 for buttons/hover states. As per user request: 'Sem excesso de animações'.",
+    "micro_interactions": "Subtle scale change (scale-98) on button click. No heavy or decorative parallax."
+  },
+  "accessibility": {
+    "contrast": "Ensure primary orange text on white bg meets minimum contrast. White text on primary orange is accessible.",
+    "focus": "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 on all interactive elements.",
+    "testing": "All interactive elements MUST include a data-testid attribute (e.g., data-testid='sidebar-orders-link', data-testid='create-order-button')."
+  },
+  "media": {
+    "icons": "Use 'lucide-react' for all iconography (Menu, Home, ShoppingCart, Users, Package, Clock, CheckCircle).",
+    "images": "Minimal images. Professional B2B layout prioritizes typography and data. Use UI avatars for users."
+  },
+  "instructions_to_main_agent": [
+    "Update index.css to use the provided CSS variables for the warm amber/orange SaaS theme.",
+    "Remove default App.css center alignment if any.",
+    "Implement Sidebar + Header layout. Ensure it's responsive (hamburger menu on mobile).",
+    "Use Manrope font for headings and IBM Plex Sans for body text. Add these to index.html or import them in CSS.",
+    "Build the Dashboard, Order Creation (with calculations), Order Details, Products, and Clients screens as specified.",
+    "Create realistic Portuguese (Brazil) mock data for orders, products, and clients.",
+    "Format all prices in BRL (R$ 0,00).",
+    "Ensure the UI uses Portuguese (Brasil) for all labels, placeholders, and text.",
+    "Write components in .js or .jsx (not .tsx) as the project uses JavaScript.",
+    "Integrate Shadcn UI components natively."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You tend to converge toward generic outputs. Make creative, distinctive frontends that surprise and delight, while respecting the minimal B2B constraints requested.",
+    "Don't make generic centered layouts. Create depth through layered design elements and clean grid systems.",
+    "You MUST NOT apply universal transition (transition: all).",
+    "You MUST NOT center align the app container. No '.App { text-align: center; }'.",
+    "NEVER use emoji characters for icons. Use lucide-react.",
+    "Every interaction needs minimal but functional micro-animations - hover states, button presses.",
+    "Prioritize using pre-existing components from src/components/ui.",
+    "Use sonner for toasts.",
+    "All interactive elements MUST include a data-testid attribute to facilitate robust automated testing."
+  ]
+}

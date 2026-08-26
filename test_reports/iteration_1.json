@@ -1,0 +1,46 @@
+{
+  "summary": "First-finish smoke tests for DACOT MVP. Backend: auth (login/me/401), products CRUD + soft delete, customers CRUD, order creation with percent discount (subtotal 110, disc 11, total 99 verified), empty-items 422, inactive-product 400 with expected PT-BR message, price snapshot preserved after product price change, status transitions valid/invalid enforced (409 for invalid), duplicate creates new order with incremented order_number and status='new', cancel sets status+cancelled_at, edit blocked (409) when delivered, stats endpoint, filters by status. Frontend: login page (invalid creds handled by 401), dashboard with kanban + metrics + revenue, new-order flow adds products and submits successfully redirecting to detail page with advance/cancel buttons, history/products/customers pages load with expected testids.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "POST /api/auth/login returns JWT + user.restaurant_id",
+    "GET /api/auth/me: 401 without token, 200 with token",
+    "Products create/update, DELETE soft-deletes (204)",
+    "Customers create works",
+    "Order create with percent discount: totals correct in reais (110/11/99)",
+    "Empty items -> 422 (Pydantic min_length=1)",
+    "Inactive product -> 400 with 'Produtos inativos nao podem ser vendidos'",
+    "Price snapshot: order item unit_price unchanged after product price updated to 999",
+    "Status transitions: new->in_preparation 200, in_preparation->delivered 409, delivered->new 409",
+    "Duplicate order returns 201, new order_number (1005), status=new, items copied",
+    "Cancel order: status=cancelled, cancelled_at set, order remains in DB (listed via ?status=cancelled)",
+    "PUT edit: 200 while new, 409 after delivered",
+    "GET /api/orders/stats returns per-status counts + today_revenue",
+    "Filter ?status=cancelled returns only cancelled",
+    "Frontend login redirects to /, invalid creds produce 401 (no visible error component but backend rejects)",
+    "Dashboard shows metrics (Novos/Em preparo/Prontos/Entregues/Faturamento) and 3-column kanban",
+    "New Order: product-search-input, add-product-<id>, submit-order-button all functional; submit redirects to /pedidos/<id>",
+    "Order Detail shows advance-to-* and cancel-order-button",
+    "Nav to Historico/Produtos/Clientes all render with expected testids"
+  ],
+  "failed": [
+    {
+      "area": "backend/orders",
+      "issue": "duplicate order response does not include 'duplicated_from' field (per PRD requirement). Field may be stored but not serialized in OrderOut.",
+      "evidence": "POST /api/orders/{id}/duplicate response JSON has no 'duplicated_from' key",
+      "priority": "LOW"
+    },
+    {
+      "area": "frontend/login",
+      "issue": "Invalid credentials: no visible error message rendered on the login page (backend correctly returns 401)",
+      "evidence": "After submitting admin@dacot.app/wrong, no .error/[role=alert] element with text was found on page",
+      "priority": "MEDIUM"
+    }
+  ],
+  "action_items": [
+    "Consider including 'duplicated_from' in the OrderOut response model so the UI can show provenance",
+    "Show a user-facing error toast/message on the Login page when POST /api/auth/login returns 401"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "95%"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}

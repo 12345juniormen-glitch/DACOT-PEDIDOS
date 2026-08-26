@@ -1,0 +1,124 @@
+import { useEffect, useState } from "react";
+import { Plus, Pencil, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { api, formatApiError } from "@/lib/api";
+import { toast } from "sonner";
+
+const empty = { name: "", phone: "", notes: "" };
+
+export default function CustomersPage() {
+  const [items, setItems] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState(empty);
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    try {
+      const { data } = await api.get("/customers");
+      setItems(data);
+    } catch (e) {
+      toast.error(formatApiError(e));
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  const openCreate = () => { setEditing(null); setForm(empty); setOpen(true); };
+  const openEdit = (c) => { setEditing(c); setForm({ name: c.name, phone: c.phone || "", notes: c.notes || "" }); setOpen(true); };
+
+  const submit = async () => {
+    if (!form.name.trim()) return toast.error("Nome obrigatório");
+    setSaving(true);
+    try {
+      if (editing) await api.put(`/customers/${editing.id}`, form);
+      else await api.post("/customers", form);
+      toast.success(editing ? "Cliente atualizado" : "Cliente criado");
+      setOpen(false); load();
+    } catch (e) {
+      toast.error(formatApiError(e));
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto">
+      <header className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight text-slate-900">Clientes</h1>
+          <p className="text-sm text-muted-foreground mt-1">Cadastro simples para vincular aos pedidos.</p>
+        </div>
+        <Button onClick={openCreate} data-testid="new-customer-button">
+          <Plus className="w-4 h-4 mr-1.5" /> Novo Cliente
+        </Button>
+      </header>
+
+      <div className="bg-white border rounded-lg overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50">
+            <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+              <th className="px-4 py-2.5 font-semibold">Nome</th>
+              <th className="px-4 py-2.5 font-semibold">Telefone</th>
+              <th className="px-4 py-2.5 font-semibold">Observações</th>
+              <th className="px-4 py-2.5 font-semibold w-16"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.length === 0 && (
+              <tr><td colSpan="4" className="px-4 py-12 text-center">
+                <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <div className="text-sm text-muted-foreground">Nenhum cliente cadastrado.</div>
+              </td></tr>
+            )}
+            {items.map((c) => (
+              <tr key={c.id} className="border-t" data-testid={`customer-row-${c.id}`}>
+                <td className="px-4 py-3 font-medium">{c.name}</td>
+                <td className="px-4 py-3 text-slate-600">{c.phone || "—"}</td>
+                <td className="px-4 py-3 text-slate-600 line-clamp-1">{c.notes || "—"}</td>
+                <td className="px-4 py-3">
+                  <button onClick={() => openEdit(c)} data-testid={`edit-customer-${c.id}`} className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-900">
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? "Editar cliente" : "Novo cliente"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Nome</Label>
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="customer-name-input" />
+            </div>
+            <div>
+              <Label>Telefone</Label>
+              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="(11) 99999-9999" data-testid="customer-phone-input" />
+            </div>
+            <div>
+              <Label>Observações</Label>
+              <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} data-testid="customer-notes-input" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button onClick={submit} disabled={saving} data-testid="save-customer-button">{saving ? "Salvando..." : "Salvar"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
