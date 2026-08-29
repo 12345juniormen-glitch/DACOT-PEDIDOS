@@ -20,6 +20,7 @@ from core.db import close_db, get_db  # noqa: E402
 from modules.auth.routes import router as auth_router  # noqa: E402
 from modules.auth.seed import ensure_indexes, seed_admin_and_restaurant  # noqa: E402
 from modules.customers.routes import router as customers_router  # noqa: E402
+from modules.handoff.routes import router as handoff_router  # noqa: E402
 from modules.orders.routes import router as orders_router  # noqa: E402
 from modules.products.routes import router as products_router  # noqa: E402
 from modules.restaurants.routes import router as restaurant_router  # noqa: E402
@@ -46,6 +47,7 @@ api_router.include_router(products_router)
 api_router.include_router(customers_router)
 api_router.include_router(orders_router)
 api_router.include_router(users_router)
+api_router.include_router(handoff_router)
 
 app.include_router(api_router)
 

@@ -3,8 +3,33 @@ import { api, getToken, setToken, formatApiError } from "@/lib/api";
 
 const AuthCtx = createContext(null);
 
+/**
+ * If the URL contains ?handoff=<jwt>, exchange it for a local session token,
+ * remove the query param from the URL, and never persist the handoff token.
+ * Returns true if a handoff was processed (regardless of success/failure).
+ */
+async function consumeHandoffFromUrl() {
+  const url = new URL(window.location.href);
+  const handoff = url.searchParams.get("handoff");
+  if (!handoff) return false;
+  // Immediately strip handoff from URL (do NOT keep in history)
+  url.searchParams.delete("handoff");
+  const cleanQs = url.searchParams.toString();
+  const cleanUrl = url.pathname + (cleanQs ? `?${cleanQs}` : "") + url.hash;
+  window.history.replaceState({}, "", cleanUrl);
+  try {
+    const { data } = await api.post("/session/exchange", { handoff });
+    setToken(data.token);
+    return { ok: true, user: data.user };
+  } catch (e) {
+    // Never leak the handoff to storage/logs; caller shows a generic error.
+    return { ok: false, error: formatApiError(e) };
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [handoffError, setHandoffError] = useState("");
 
   const refresh = useCallback(async () => {
     try {
@@ -18,8 +43,21 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!getToken()) { setUser(false); return; }
-    refresh();
+    (async () => {
+      const result = await consumeHandoffFromUrl();
+      if (result && result.ok) {
+        setUser(result.user);
+        return;
+      }
+      if (result && result.ok === false) {
+        setHandoffError(result.error || "Falha no handoff");
+        setToken(null);
+        setUser(false);
+        return;
+      }
+      if (!getToken()) { setUser(false); return; }
+      refresh();
+    })();
   }, [refresh]);
 
   const login = async (email, password) => {
@@ -35,6 +73,6 @@ export function AuthProvider({ children }) {
     setToken(null); setUser(false);
   };
 
-  return <AuthCtx.Provider value={{ user, login, logout, refresh }}>{children}</AuthCtx.Provider>;
+  return <AuthCtx.Provider value={{ user, login, logout, refresh, handoffError }}>{children}</AuthCtx.Provider>;
 }
 export const useAuth = () => useContext(AuthCtx);

@@ -52,7 +52,19 @@ async def ensure_indexes() -> None:
     db = get_db()
     await db.users.create_index("email", unique=True)
     await db.users.create_index("id", unique=True)
+    await db.users.create_index(
+        [("restaurant_id", 1), ("hub_user_id", 1)],
+        unique=True,
+        partialFilterExpression={"hub_user_id": {"$exists": True}},
+    )
     await db.restaurants.create_index("id", unique=True)
+    await db.restaurants.create_index(
+        "hub_tenant_id",
+        unique=True,
+        partialFilterExpression={"hub_tenant_id": {"$exists": True}},
+    )
+    await db.handoff_jtis.create_index("jti", unique=True)
+    await db.handoff_jtis.create_index("expires_at", expireAfterSeconds=0)
     await db.products.create_index([("restaurant_id", 1), ("id", 1)], unique=True)
     await db.products.create_index([("restaurant_id", 1), ("active", 1)])
     await db.customers.create_index([("restaurant_id", 1), ("id", 1)], unique=True)

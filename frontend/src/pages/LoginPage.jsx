@@ -8,12 +8,12 @@ import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 
 export default function LoginPage() {
-  const { user, login } = useAuth();
+  const { user, login, handoffError } = useAuth();
   const nav = useNavigate();
   const [email, setEmail] = useState("admin@dacot.app");
   const [password, setPassword] = useState("admin123");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(handoffError || "");
 
   if (user && typeof user === "object") return <Navigate to="/" replace />;
 
