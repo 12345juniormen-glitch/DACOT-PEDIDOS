@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from core.db import get_db
-from core.deps import Tenant, get_tenant
+from core.deps import Tenant, get_tenant, require_roles
 
 
 class CustomerInput(BaseModel):
@@ -52,7 +52,7 @@ async def list_customers(tenant: Tenant = Depends(get_tenant), search: str = Que
 
 
 @router.post("", response_model=CustomerOut, status_code=201)
-async def create_customer(payload: CustomerInput, tenant: Tenant = Depends(get_tenant)):
+async def create_customer(payload: CustomerInput, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
     db = get_db()
     now = datetime.now(timezone.utc).isoformat()
     doc = {
@@ -80,7 +80,7 @@ async def get_customer(customer_id: str, tenant: Tenant = Depends(get_tenant)):
 
 
 @router.put("/{customer_id}", response_model=CustomerOut)
-async def update_customer(customer_id: str, payload: CustomerInput, tenant: Tenant = Depends(get_tenant)):
+async def update_customer(customer_id: str, payload: CustomerInput, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
     db = get_db()
     updates = {
         "name": payload.name.strip(),

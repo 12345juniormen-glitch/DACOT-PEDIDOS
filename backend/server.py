@@ -23,6 +23,7 @@ from modules.customers.routes import router as customers_router  # noqa: E402
 from modules.orders.routes import router as orders_router  # noqa: E402
 from modules.products.routes import router as products_router  # noqa: E402
 from modules.restaurants.routes import router as restaurant_router  # noqa: E402
+from modules.users.routes import router as users_router  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("dacot")
@@ -44,6 +45,7 @@ api_router.include_router(restaurant_router)
 api_router.include_router(products_router)
 api_router.include_router(customers_router)
 api_router.include_router(orders_router)
+api_router.include_router(users_router)
 
 app.include_router(api_router)
 

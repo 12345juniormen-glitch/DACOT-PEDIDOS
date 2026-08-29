@@ -29,14 +29,21 @@ Sistema SaaS para restaurantes chamado DACOT, construído em módulos. Primeiro 
 - `orders { id, restaurant_id, order_number, customer_id?, customer_name?, items[snapshot], notes, subtotal_cents, discount_type, discount_value, discount_cents, total_cents, status, created_at, updated_at, cancelled_at?, delivered_at?, duplicated_from?, created_by }`
 
 ## What's implemented (2026-02)
-- ✅ JWT auth (login, /me, logout) + seed idempotente admin+restaurante
-- ✅ Products CRUD com soft-delete
-- ✅ Customers CRUD
+- ✅ JWT auth (login, /me, logout, change-password) + seed idempotente admin+restaurante
+- ✅ **Users CRUD (admin only) + RBAC completo aplicado no backend**
+  - Papéis: admin, manager, waiter, kitchen
+  - `must_change_password=true` para usuários criados/resetados → backend bloqueia todas as rotas exceto auth/me, auth/logout, auth/change-password
+  - Proteção contra remoção/rebaixamento do último admin ativo
+  - Kitchen só pode marcar status → ready
+- ✅ Products CRUD com soft-delete (admin/manager mutam; waiter GET-only)
+- ✅ Customers CRUD (admin/manager/waiter)
 - ✅ Orders: criar, ver, editar (com regras de status), duplicar, cancelar, mudar status, listar/filtrar, stats
+  - Stats (financeiro) só admin/manager
 - ✅ Snapshot de preço e validação de produto ativo na criação
 - ✅ Cálculo em cents (Decimal) — sem float bugs
-- ✅ Dashboard kanban (Novo/Em preparo/Pronto) + métricas + faturamento do dia
+- ✅ Dashboard kanban + métricas + faturamento oculto para waiter/kitchen
 - ✅ Histórico com filtros por status e busca
+- ✅ Frontend: sidebar filtrada por papel + rotas com RoleGuard + fluxo forçado de troca de senha
 - ✅ UI clara/minimalista PT-BR/BRL, Manrope + IBM Plex Sans, accent laranja
 
 ## Backlog priorizado

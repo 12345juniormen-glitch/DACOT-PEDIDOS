@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from core.db import get_db
-from core.deps import Tenant, get_tenant
+from core.deps import Tenant, get_tenant, require_roles
 from core.money import cents_to_reais, reais_to_cents
 
 
@@ -209,7 +209,7 @@ async def list_orders(
 
 
 @router.get("/stats")
-async def orders_stats(tenant: Tenant = Depends(get_tenant)):
+async def orders_stats(tenant: Tenant = Depends(require_roles("admin", "manager"))):
     db = get_db()
     pipeline = [
         {"$match": {"restaurant_id": tenant.restaurant_id}},
@@ -236,7 +236,7 @@ async def orders_stats(tenant: Tenant = Depends(get_tenant)):
 
 
 @router.post("", response_model=OrderOut, status_code=201)
-async def create_order(payload: OrderCreateInput, tenant: Tenant = Depends(get_tenant)):
+async def create_order(payload: OrderCreateInput, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
     db = get_db()
     items_snap = await _build_items_snapshot(db, tenant.restaurant_id, payload.items)
     subtotal_c, discount_c, total_c = _compute_totals(items_snap, payload.discount_type, payload.discount_value)
@@ -275,7 +275,7 @@ async def get_order(order_id: str, tenant: Tenant = Depends(get_tenant)):
 
 
 @router.put("/{order_id}", response_model=OrderOut)
-async def update_order(order_id: str, payload: OrderUpdateInput, tenant: Tenant = Depends(get_tenant)):
+async def update_order(order_id: str, payload: OrderUpdateInput, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
     db = get_db()
     existing = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0})
     if not existing:
@@ -310,6 +310,9 @@ async def update_order(order_id: str, payload: OrderUpdateInput, tenant: Tenant 
 
 @router.patch("/{order_id}/status", response_model=OrderOut)
 async def change_status(order_id: str, payload: OrderStatusInput, tenant: Tenant = Depends(get_tenant)):
+    # Kitchen: only allowed transition is in_preparation -> ready
+    if tenant.role == "kitchen" and payload.status != "ready":
+        raise HTTPException(status_code=403, detail="Cozinha só pode marcar como Pronto")
     db = get_db()
     existing = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0})
     if not existing:
@@ -337,12 +340,12 @@ async def change_status(order_id: str, payload: OrderStatusInput, tenant: Tenant
 
 
 @router.post("/{order_id}/cancel", response_model=OrderOut)
-async def cancel_order(order_id: str, tenant: Tenant = Depends(get_tenant)):
+async def cancel_order(order_id: str, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
     return await change_status(order_id, OrderStatusInput(status="cancelled"), tenant)
 
 
 @router.post("/{order_id}/duplicate", response_model=OrderOut, status_code=201)
-async def duplicate_order(order_id: str, tenant: Tenant = Depends(get_tenant)):
+async def duplicate_order(order_id: str, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
     db = get_db()
     src = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0})
     if not src:

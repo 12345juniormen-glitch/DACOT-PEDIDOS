@@ -34,6 +34,8 @@ async def seed_admin_and_restaurant() -> None:
             "name": "Administrador",
             "role": "admin",
             "restaurant_id": restaurant_id,
+            "active": True,
+            "must_change_password": False,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
     else:

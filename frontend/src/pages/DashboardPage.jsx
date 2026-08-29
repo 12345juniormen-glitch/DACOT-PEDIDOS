@@ -8,6 +8,8 @@ import { api, formatApiError } from "@/lib/api";
 import { brl, formatTime, STATUS_LABEL, NEXT_STATUS } from "@/lib/format";
 import { toast } from "sonner";
 
+import { useAuth } from "@/context/AuthContext";
+
 const COLUMNS = [
   { key: "new", label: "Novo" },
   { key: "in_preparation", label: "Em preparo" },
@@ -15,6 +17,8 @@ const COLUMNS = [
 ];
 
 export default function DashboardPage() {
+  const { user } = useAuth();
+  const canSeeFinance = user && (user.role === "admin" || user.role === "manager");
   const [orders, setOrders] = useState([]);
   const [stats, setStats] = useState({ new: 0, in_preparation: 0, ready: 0, delivered: 0, cancelled: 0, today_revenue: 0 });
   const [loading, setLoading] = useState(true);
@@ -22,12 +26,12 @@ export default function DashboardPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [ordersRes, statsRes] = await Promise.all([
-        api.get("/orders", { params: { active_only: true } }),
-        api.get("/orders/stats"),
-      ]);
+      const ordersRes = await api.get("/orders", { params: { active_only: true } });
       setOrders(ordersRes.data);
-      setStats(statsRes.data);
+      if (canSeeFinance) {
+        const statsRes = await api.get("/orders/stats");
+        setStats(statsRes.data);
+      }
     } catch (e) {
       toast.error(formatApiError(e));
     } finally {
@@ -84,7 +88,7 @@ export default function DashboardPage() {
         <MetricCard label="Em preparo" value={stats.in_preparation} testid="metric-in-prep" tone="orange" />
         <MetricCard label="Prontos" value={stats.ready} testid="metric-ready" tone="green" />
         <MetricCard label="Entregues" value={stats.delivered} testid="metric-delivered" tone="slate" />
-        <MetricCard label="Faturamento hoje" value={brl(stats.today_revenue)} testid="metric-revenue" tone="orange" isMoney />
+        {canSeeFinance && <MetricCard label="Faturamento hoje" value={brl(stats.today_revenue)} testid="metric-revenue" tone="orange" isMoney />}
       </div>
 
       {/* Kanban */}
