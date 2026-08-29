@@ -310,9 +310,10 @@ async def update_order(order_id: str, payload: OrderUpdateInput, tenant: Tenant 
 
 @router.patch("/{order_id}/status", response_model=OrderOut)
 async def change_status(order_id: str, payload: OrderStatusInput, tenant: Tenant = Depends(get_tenant)):
-    # Kitchen: only allowed transition is in_preparation -> ready
-    if tenant.role == "kitchen" and payload.status != "ready":
-        raise HTTPException(status_code=403, detail="Cozinha só pode marcar como Pronto")
+    # Kitchen: only allowed transitions are new→in_preparation and in_preparation→ready.
+    # The origin check is enforced by ALLOWED_TRANSITIONS below (kitchen can't skip states).
+    if tenant.role == "kitchen" and payload.status not in {"in_preparation", "ready"}:
+        raise HTTPException(status_code=403, detail="Cozinha só pode iniciar preparo ou marcar como Pronto")
     db = get_db()
     existing = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0})
     if not existing:
