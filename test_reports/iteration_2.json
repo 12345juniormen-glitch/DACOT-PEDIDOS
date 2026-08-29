@@ -1,0 +1,37 @@
+{
+  "summary": "Backend-only security validation of Hub handoff cross-tenant isolation for DACOT Orders. Re-ran /app/tests_handoff_isolation.py (18/18 PASS) and /app/tests_handoff.py (21/21 PASS) plus a new pytest suite /app/backend/tests/backend_test.py (30/30 PASS) executed against the PUBLIC URL. Proven: (a) legit Hub-signed handoff for tenant-alpha cannot read/mutate any tenant-beta order/product/customer (all 404, beta data verified untouched afterwards), (b) listings and /restaurant/current are strictly scoped to the JWT restaurant_id, (c) restaurant_id cannot be injected via body, querystring or X-Restaurant-Id/X-Tenant-Id headers, (d) waiter role cannot be escalated (POST /users 403, PUT /users/self role=admin 403, GET /orders/stats 403, GET /users 403, change-password with extra role field ignored -> /auth/me still 'waiter'), (e) handoff hardening holds: replay (dup jti) 401, tampered signature 401, alg=none 401, bad iss/aud/module/role/handoff_version 401, expired 401, inactive tenant 403, unknown tenant 403, raw handoff JWT not usable as session token 401, handoff-only users cannot log in locally. Local admin login regression OK (200, sees only its own restaurant, cannot see beta data). NO ISOLATION LEAK FOUND — no regression. Mock Hub at 127.0.0.1:8899 was alive and untouched; envs intact. bcrypt hashes are $2b$12$ (60 chars).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/login", "issue": "No brute-force protection/lockout: 7 consecutive wrong-password attempts all returned 401 with no throttling (no 429), and the valid login still worked immediately after. Playbook expects lockout after ~5 fails."},
+      {"endpoint": "CORS (all /api)", "issue": "CORS_ORIGINS='*' -> preflight replies Access-Control-Allow-Origin: * and Allow-Headers: *. Any origin can call the API with a token taken from localStorage. Recommend explicit origin allow-list (Hub + module domains)."},
+      {"endpoint": "GET /api/restaurant/current", "issue": "Route prefix is singular '/restaurant' while other resources are plural; the review request referenced /restaurants/current (404). Naming inconsistency only — behaviour is correctly tenant-scoped."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/security_posture_check.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/tests_handoff_isolation.py",
+    "/app/tests_handoff.py"
+  ],
+  "action_items": [
+    "Optional (not an isolation leak): add login rate limiting / account lockout after 5 failed attempts.",
+    "Optional: replace CORS wildcard with explicit origin list.",
+    "Refactor modules/handoff/routes.py: stop mutating os.environ['JWT_EXPIRE_MINUTES'] to set session TTL — under concurrency this leaks the 8h value into concurrent normal logins. Pass expiry as a parameter to create_access_token instead."
+  ],
+  "critical_code_review_comments": [
+    "handoff/routes.py exchange(): global os.environ mutation for JWT_EXPIRE_MINUTES is not thread/task-safe (race with concurrent /auth/login). Add an explicit expire_minutes arg in core/security.create_access_token.",
+    "Handoff-provisioned users store password_hash='' — currently safe (bcrypt.checkpw raises ValueError -> False, and LoginInput requires min_length=1), but an explicit 'login disabled for provisioned_by=hub_handoff' check would be defence-in-depth.",
+    "Isolation is enforced consistently: every orders/products/customers query filters by tenant.restaurant_id from the JWT and no route reads restaurant_id from body/query — verified by test, keep this invariant in any new route (consider a shared repository helper to prevent future drift)."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py", "/app/backend/tests/security_posture_check.py"],
+  "success_rate": {"backend": "100% (30/30 pytest, 18/18 isolation script, 21/21 handoff script)", "frontend": "not tested (backend-only scope)"},
+  "seed_data_creation": "Handoff sessions for tenant-alpha and tenant-beta; TEST_ prefixed products/customers/orders inside these two throwaway tenants only. No seeded/production data (Restaurante Demo / admin@dacot.app) modified.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@dacot.app / admin123 (from /app/memory/test_credentials.md); handoff JWTs signed locally with HANDOFF_JWT_SECRET from backend/.env",
+  "context_for_next_testing_agent": "Regression suite lives at /app/backend/tests/backend_test.py (run: cd /app/backend && python3 -m pytest tests/backend_test.py -q; pytest.ini already adds xdist args, do not pass -p no:xdist). It needs the mock Hub running: `python3 /app/mock_hub.py &` on 127.0.0.1:8899. Note /restaurant/current (singular). Remaining untested areas: frontend handoff URL/localStorage flow, order money/rounding logic, users last-admin block, product delete cascade.",
+  "rca_of_the_issue": "No isolation defect found. Root of the strong isolation: core/deps.get_tenant derives restaurant_id exclusively from the signed session JWT and every module query includes it in the Mongo filter, so cross-tenant ids resolve to 404; Pydantic models ignore extra body fields (restaurant_id/role) and no route reads restaurant_id from query/headers; RBAC via require_roles uses the JWT role only."
+}
