@@ -24,8 +24,9 @@ def _get_secret() -> str:
     return os.environ["JWT_SECRET"]
 
 
-def create_access_token(user_id: str, restaurant_id: str, role: str, email: str) -> str:
-    expire_minutes = int(os.environ.get("JWT_EXPIRE_MINUTES", "720"))
+def create_access_token(user_id: str, restaurant_id: str, role: str, email: str, expire_minutes: int | None = None) -> str:
+    if expire_minutes is None:
+        expire_minutes = int(os.environ.get("JWT_EXPIRE_MINUTES", "720"))
     payload = {
         "sub": user_id,
         "restaurant_id": restaurant_id,

@@ -240,22 +240,15 @@ async def exchange(payload: ExchangeInput):
     await _find_or_create_restaurant(restaurant_id)
     user = await _find_or_create_user(restaurant_id, hub_user_id, role)
 
-    # Issue local session (respects existing security helper; expiry overridden to 8h)
+    # Issue local session (respects existing security helper; expiry passed as arg to avoid env races)
     session_minutes = int(float(os.environ.get("SESSION_HOURS", "8")) * 60)
-    original_env = os.environ.get("JWT_EXPIRE_MINUTES")
-    os.environ["JWT_EXPIRE_MINUTES"] = str(session_minutes)
-    try:
-        token = create_access_token(
-            user_id=user["id"],
-            restaurant_id=user["restaurant_id"],
-            role=user["role"],
-            email=user["email"],
-        )
-    finally:
-        if original_env is None:
-            os.environ.pop("JWT_EXPIRE_MINUTES", None)
-        else:
-            os.environ["JWT_EXPIRE_MINUTES"] = original_env
+    token = create_access_token(
+        user_id=user["id"],
+        restaurant_id=user["restaurant_id"],
+        role=user["role"],
+        email=user["email"],
+        expire_minutes=session_minutes,
+    )
 
     return ExchangeResponse(
         token=token,
