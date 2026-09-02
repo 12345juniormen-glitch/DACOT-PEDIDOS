@@ -38,6 +38,13 @@ async def get_current_user(request: Request) -> dict:
     if not user.get("active", True):
         raise HTTPException(status_code=401, detail="Usuário inativo")
 
+    # Tenant/role must match the authenticated identity; the client cannot choose a tenant
+    # by tampering with JWT claims or by replaying a valid token for a different restaurant.
+    if payload.get("restaurant_id") != user.get("restaurant_id"):
+        raise HTTPException(status_code=401, detail="Tenant da sessão não corresponde ao usuário autenticado")
+    if payload.get("role") != user.get("role"):
+        raise HTTPException(status_code=401, detail="Role da sessão não corresponde ao usuário autenticado")
+
     # If password change is required, only allow a small allow-list of routes.
     if user.get("must_change_password") and request.url.path not in _PW_LOCK_ALLOWED_PATHS:
         raise HTTPException(

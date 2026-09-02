@@ -48,6 +48,7 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/mudar-senha" element={<ForcedPwGuard />} />
           <Route path="/" element={<Shell><DashboardPage /></Shell>} />
+          <Route path="/:restaurantSlug" element={<Shell><DashboardPage /></Shell>} />
           <Route path="/pedidos/novo" element={<Shell roles={["admin","manager","waiter"]}><OrderCreatePage /></Shell>} />
           <Route path="/pedidos/:id" element={<Shell><OrderDetailPage /></Shell>} />
           <Route path="/pedidos/:id/editar" element={<Shell roles={["admin","manager","waiter"]}><OrderEditPage /></Shell>} />

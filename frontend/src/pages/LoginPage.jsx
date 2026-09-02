@@ -10,8 +10,8 @@ import { toast } from "sonner";
 export default function LoginPage() {
   const { user, login, handoffError } = useAuth();
   const nav = useNavigate();
-  const [email, setEmail] = useState("admin@dacot.app");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(handoffError || "");
 
@@ -94,7 +94,7 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-6 text-xs text-muted-foreground border-t pt-4">
-            Conta de demonstração: <span className="font-mono">admin@dacot.app</span> / <span className="font-mono">admin123</span>
+  
           </div>
         </div>
       </div>

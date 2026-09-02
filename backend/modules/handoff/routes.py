@@ -38,16 +38,20 @@ class ExchangeUser(BaseModel):
     name: str
     role: str
     restaurant_id: str
+    restaurant_slug: str | None = None
     must_change_password: bool = False
     active: bool = True
 
 
 class ExchangeResponse(BaseModel):
+    ok: bool = True
     token: str
+    session_token: str | None = None
     user: ExchangeUser
 
 
 router = APIRouter(prefix="/session", tags=["handoff"])
+compat_router = APIRouter(prefix="/orders/session", tags=["handoff"])
 
 
 def _cfg(name: str, required: bool = True, default: str | None = None) -> str:
@@ -250,15 +254,33 @@ async def exchange(payload: ExchangeInput):
         expire_minutes=session_minutes,
     )
 
-    return ExchangeResponse(
-        token=token,
-        user=ExchangeUser(
-            id=user["id"],
-            email=user["email"],
-            name=user["name"],
-            role=user["role"],
-            restaurant_id=user["restaurant_id"],
-            must_change_password=bool(user.get("must_change_password", False)),
-            active=bool(user.get("active", True)),
-        ),
+    user_out = ExchangeUser(
+        id=user["id"],
+        email=user["email"],
+        name=user["name"],
+        role=user["role"],
+        restaurant_id=user["restaurant_id"],
+        restaurant_slug=str(handoff_claims.get("restaurant_slug", "")).strip() or None,
+        must_change_password=bool(user.get("must_change_password", False)),
+        active=bool(user.get("active", True)),
     )
+    response = ExchangeResponse(
+        ok=True,
+        token=token,
+        session_token=token,
+        user=user_out,
+    )
+    return response
+
+
+@compat_router.post("/exchange", response_model=dict)
+async def exchange_compat(payload: ExchangeInput):
+    result = await exchange(payload)
+    if isinstance(result, dict):
+        return result
+    return {
+        "ok": True,
+        "session_token": result.token,
+        "token": result.token,
+        "user": result.user.model_dump(),
+    }

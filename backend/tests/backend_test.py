@@ -288,6 +288,36 @@ class TestRoleEscalation:
         assert requests.get(f"{API}/orders", headers={"Authorization": f"Bearer {tok}"}, timeout=20).status_code == 401
 
 
+class TestAuthenticatedTenantBinding:
+    def test_token_restaurant_id_must_match_user_record(self):
+        sess = exchange(sign_handoff(ALPHA, "admin"))
+        assert sess.status_code == 200, sess.text[:200]
+        token = sess.json()["token"]
+        payload = pyjwt.decode(token, backend_env.get("JWT_SECRET"), algorithms=["HS256"])
+        forged = pyjwt.encode({**payload, "restaurant_id": BETA}, backend_env.get("JWT_SECRET"), algorithm="HS256")
+        r = requests.get(f"{API}/auth/me", headers={"Authorization": f"Bearer {forged}"}, timeout=20)
+        assert r.status_code == 401, f"token com tenant divergente aceito: {r.status_code} {r.text[:200]}"
+
+    def test_token_role_must_match_user_record(self):
+        sess = exchange(sign_handoff(ALPHA, "admin"))
+        assert sess.status_code == 200, sess.text[:200]
+        token = sess.json()["token"]
+        payload = pyjwt.decode(token, backend_env.get("JWT_SECRET"), algorithms=["HS256"])
+        forged = pyjwt.encode({**payload, "role": "waiter"}, backend_env.get("JWT_SECRET"), algorithm="HS256")
+        r = requests.get(f"{API}/auth/me", headers={"Authorization": f"Bearer {forged}"}, timeout=20)
+        assert r.status_code == 401, f"token com role divergente aceito: {r.status_code} {r.text[:200]}"
+
+    def test_orders_session_exchange_compat_contract(self):
+        handoff = sign_handoff(ALPHA, "admin", sub_id="hub-compat", restaurant_slug="padaria-grao-dourado")
+        r = requests.post(f"{API}/orders/session/exchange", json={"handoff": handoff}, timeout=20)
+        assert r.status_code == 200, r.text[:300]
+        body = r.json()
+        assert body["ok"] is True
+        assert body["session_token"] == body["token"]
+        assert body["user"]["restaurant_id"] == ALPHA
+        assert body["user"]["restaurant_slug"] == "padaria-grao-dourado"
+
+
 # ---------------- Regression: local admin login ----------------
 class TestLocalAdminRegression:
     def test_admin_login_and_scope(self):

@@ -12,17 +12,35 @@ async function consumeHandoffFromUrl() {
   const url = new URL(window.location.href);
   const handoff = url.searchParams.get("handoff");
   if (!handoff) return false;
-  // Immediately strip handoff from URL (do NOT keep in history)
+
+  const urlSlug = url.pathname.replace(/^\/+|\/+$/g, "");
+  const routerSlug = urlSlug || null;
+
+  // Strip handoff immediately from the URL; the token is never kept in history or storage.
   url.searchParams.delete("handoff");
   const cleanQs = url.searchParams.toString();
   const cleanUrl = url.pathname + (cleanQs ? `?${cleanQs}` : "") + url.hash;
   window.history.replaceState({}, "", cleanUrl);
+
   try {
-    const { data } = await api.post("/session/exchange", { handoff });
-    setToken(data.token);
+    let data;
+    try {
+      ({ data } = await api.post("/orders/session/exchange", { handoff }));
+    } catch (err) {
+      if (err?.response?.status === 404) {
+        ({ data } = await api.post("/session/exchange", { handoff }));
+      } else {
+        throw err;
+      }
+    }
+
+    if (routerSlug && data?.user?.restaurant_slug && data.user.restaurant_slug !== routerSlug) {
+      return { ok: false, error: "Slug do restaurante não corresponde à identidade autenticada." };
+    }
+
+    setToken(data.session_token || data.token);
     return { ok: true, user: data.user };
   } catch (e) {
-    // Never leak the handoff to storage/logs; caller shows a generic error.
     return { ok: false, error: formatApiError(e) };
   }
 }
