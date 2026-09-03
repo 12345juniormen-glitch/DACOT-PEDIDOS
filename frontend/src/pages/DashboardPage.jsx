@@ -71,8 +71,8 @@ export default function DashboardPage() {
           <p className="text-sm text-muted-foreground mt-1">Pedidos ativos por status</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={load} data-testid="refresh-orders-button" size="sm">
-            <RefreshCw className="w-4 h-4 mr-1.5" /> Atualizar
+          <Button variant="outline" onClick={load} disabled={loading} data-testid="refresh-orders-button" size="sm">
+            <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} /> Atualizar
           </Button>
           <Link to="/pedidos/novo">
             <Button data-testid="create-order-button" size="sm">
