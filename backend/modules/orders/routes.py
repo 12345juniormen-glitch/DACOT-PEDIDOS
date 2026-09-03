@@ -27,10 +27,13 @@ DiscountType = Literal["none", "fixed", "percent"]
 RESTAURANT_TZ = ZoneInfo("America/Sao_Paulo")
 
 # status transitions allowed (source -> allowed targets)
+# Backward moves are allowed within the active kitchen pipeline (new <-> in_preparation <-> ready)
+# so an accidental advance can be undone. delivered/cancelled stay terminal — delivered feeds
+# revenue reporting and cancellation is documented/communicated to users as final.
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "new": {"in_preparation", "cancelled"},
-    "in_preparation": {"ready", "cancelled"},
-    "ready": {"delivered", "cancelled"},
+    "in_preparation": {"new", "ready", "cancelled"},
+    "ready": {"in_preparation", "delivered", "cancelled"},
     "delivered": set(),
     "cancelled": set(),
 }
