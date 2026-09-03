@@ -9,6 +9,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import Literal, Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -20,6 +21,10 @@ from core.money import cents_to_reais, reais_to_cents
 
 OrderStatus = Literal["new", "in_preparation", "ready", "delivered", "cancelled"]
 DiscountType = Literal["none", "fixed", "percent"]
+
+# Day boundary for "today's revenue" is computed in the restaurant's local timezone,
+# not UTC — otherwise the day rolls over 3h early (America/Sao_Paulo = UTC-3).
+RESTAURANT_TZ = ZoneInfo("America/Sao_Paulo")
 
 # status transitions allowed (source -> allowed targets)
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
@@ -218,8 +223,13 @@ async def orders_stats(tenant: Tenant = Depends(require_roles("admin", "manager"
     result = {"new": 0, "in_preparation": 0, "ready": 0, "delivered": 0, "cancelled": 0}
     async for row in db.orders.aggregate(pipeline):
         result[row["_id"]] = row["count"]
-    # today's revenue (delivered only)
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    # today's revenue (delivered only) — day boundary is local midnight, converted to UTC
+    today_start = (
+        datetime.now(RESTAURANT_TZ)
+        .replace(hour=0, minute=0, second=0, microsecond=0)
+        .astimezone(timezone.utc)
+        .isoformat()
+    )
     today_pipeline = [
         {"$match": {
             "restaurant_id": tenant.restaurant_id,
