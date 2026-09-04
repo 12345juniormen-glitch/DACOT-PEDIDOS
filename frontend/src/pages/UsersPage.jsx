@@ -79,10 +79,10 @@ export default function UsersPage() {
         action={<Button onClick={() => setOpenCreate(true)} data-testid="new-user-button"><Plus className="w-4 h-4 mr-1.5" /> Novo Usuário</Button>}
       />
 
-      <div className="bg-white border rounded-lg overflow-hidden">
+      <div className="bg-card border rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-sm">
-          <thead className="bg-slate-50">
+          <thead className="bg-muted">
             <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-2.5 font-semibold">Nome</th>
               <th className="px-4 py-2.5 font-semibold">Email</th>
@@ -106,12 +106,12 @@ export default function UsersPage() {
                 <td className="px-4 py-3 font-medium">
                   <span className="flex items-center gap-2">{u.name}{u.must_change_password && <span title="Senha temporária" className="text-amber-600"><ShieldCheck className="w-3.5 h-3.5" /></span>}</span>
                 </td>
-                <td className="px-4 py-3 text-slate-600">{u.email}</td>
-                <td className="px-4 py-3 text-slate-700">{ROLE_LABEL[u.role]}</td>
+                <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
+                <td className="px-4 py-3 text-foreground">{ROLE_LABEL[u.role]}</td>
                 <td className="px-4 py-3"><ActivePill active={u.active} /></td>
                 <td className="px-4 py-3">
-                  <button onClick={() => { setTarget(u); setEditForm({ name: u.name, role: u.role, active: u.active }); setOpenEdit(true); }} data-testid={`edit-user-${u.id}`} className="p-1.5 rounded hover:bg-slate-100 text-slate-500" title="Editar"><Pencil className="w-4 h-4" /></button>
-                  <button onClick={() => { setTarget(u); setTempPw(""); setOpenReset(true); }} data-testid={`reset-user-${u.id}`} className="p-1.5 rounded hover:bg-slate-100 text-slate-500 ml-1" title="Redefinir senha"><KeyRound className="w-4 h-4" /></button>
+                  <button onClick={() => { setTarget(u); setEditForm({ name: u.name, role: u.role, active: u.active }); setOpenEdit(true); }} data-testid={`edit-user-${u.id}`} className="p-1.5 rounded hover:bg-muted text-muted-foreground" title="Editar"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => { setTarget(u); setTempPw(""); setOpenReset(true); }} data-testid={`reset-user-${u.id}`} className="p-1.5 rounded hover:bg-muted text-muted-foreground ml-1" title="Redefinir senha"><KeyRound className="w-4 h-4" /></button>
                 </td>
               </tr>
             ))}

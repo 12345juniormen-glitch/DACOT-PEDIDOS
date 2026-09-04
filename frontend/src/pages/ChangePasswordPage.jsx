@@ -39,20 +39,20 @@ export default function ChangePasswordPage({ forced = false }) {
           <div><div className="font-display font-extrabold text-xl leading-none">DACOT</div><div className="text-[11px] text-muted-foreground mt-1">Alterar senha</div></div>
         </div>
         {forced && (
-          <div className="mb-4 p-3 rounded-md bg-amber-50 border border-amber-200 text-sm text-amber-900 flex gap-2">
+          <div className="mb-4 p-3 rounded-md bg-amber-50 border border-amber-200 text-sm text-amber-900 dark:bg-amber-950 dark:border-amber-900 dark:text-amber-200 flex gap-2">
             <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0" />
             <div>Sua senha é temporária. Defina uma nova senha para continuar usando o DACOT.</div>
           </div>
         )}
-        <h1 className="text-2xl font-display font-bold text-slate-900">Alterar senha</h1>
+        <h1 className="text-2xl font-display font-bold text-foreground">Alterar senha</h1>
         <p className="text-sm text-muted-foreground mt-1">Usuário: {user?.email}</p>
         <form onSubmit={submit} className="mt-6 space-y-4">
           <div><Label>Senha atual</Label><Input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required data-testid="current-password-input" /></div>
           <div><Label>Nova senha</Label><Input type="password" value={next} onChange={(e) => setNext(e.target.value)} required data-testid="new-password-input" /></div>
           <div><Label>Confirmar nova senha</Label><Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required data-testid="confirm-password-input" /></div>
           <Button type="submit" disabled={saving} className="w-full" data-testid="submit-change-password">{saving ? "Alterando..." : "Alterar senha"}</Button>
-          {!forced && <button type="button" onClick={() => nav(-1)} className="w-full text-xs text-muted-foreground hover:text-slate-900">Voltar</button>}
-          {forced && <button type="button" onClick={logout} className="w-full text-xs text-muted-foreground hover:text-slate-900">Sair</button>}
+          {!forced && <button type="button" onClick={() => nav(-1)} className="w-full text-xs text-muted-foreground hover:text-foreground">Voltar</button>}
+          {forced && <button type="button" onClick={logout} className="w-full text-xs text-muted-foreground hover:text-foreground">Sair</button>}
         </form>
       </div>
     </div>

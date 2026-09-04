@@ -46,9 +46,46 @@ h1, h2, h3, h4, .font-display {
         --chart-5: 27 87% 67%;
         --radius: 0.375rem;
     }
+
+    /* Modo escuro: paleta desenhada de propósito (não é o claro invertido).
+       Fundo escuro sofisticado (não preto puro), superfícies um degrau mais
+       claras que o fundo, bordas discretas, e o laranja DACOT preservado
+       como cor de ação com o mesmo papel que no claro. */
+    .dark {
+        --background: 222 40% 7%;
+        --foreground: 210 30% 95%;
+        --card: 222 35% 11%;
+        --card-foreground: 210 30% 95%;
+        --popover: 222 35% 11%;
+        --popover-foreground: 210 30% 95%;
+        --primary: 24 90% 58%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 222 25% 15%;
+        --secondary-foreground: 210 20% 90%;
+        --muted: 222 22% 14%;
+        --muted-foreground: 215 18% 65%;
+        --accent: 24 45% 16%;
+        --accent-foreground: 24 90% 72%;
+        --destructive: 0 62% 48%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 222 18% 19%;
+        --input: 222 18% 19%;
+        --ring: 24 90% 58%;
+        --chart-1: 24 90% 58%;
+        --chart-2: 173 50% 45%;
+        --chart-3: 197 40% 55%;
+        --chart-4: 43 65% 60%;
+        --chart-5: 27 75% 60%;
+    }
 }
 
 @layer base {
+    :root {
+        color-scheme: light;
+    }
+    .dark {
+        color-scheme: dark;
+    }
     * {
         @apply border-border;
     }
@@ -67,9 +104,10 @@ h1, h2, h3, h4, .font-display {
     }
 }
 
-/* Status pills */
-.status-new        { @apply bg-blue-50 text-blue-700 border-blue-200; }
-.status-in_prep    { @apply bg-orange-50 text-orange-700 border-orange-200; }
-.status-ready      { @apply bg-emerald-50 text-emerald-700 border-emerald-200; }
-.status-delivered  { @apply bg-slate-100 text-slate-700 border-slate-200; }
-.status-cancelled  { @apply bg-rose-50 text-rose-700 border-rose-200; }
+/* Status pills — mesma identidade de cor em qualquer tema; no escuro só
+   ajusta luminosidade/contraste (fundo mais escuro e saturado, texto claro). */
+.status-new        { @apply bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-900; }
+.status-in_prep    { @apply bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-900; }
+.status-ready      { @apply bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-900; }
+.status-delivered  { @apply bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700; }
+.status-cancelled  { @apply bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-900; }

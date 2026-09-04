@@ -39,10 +39,10 @@ export default function CustomersPage() {
         }
       />
 
-      <div className="bg-white border rounded-lg overflow-hidden">
+      <div className="bg-card border rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-sm">
-          <thead className="bg-slate-50">
+          <thead className="bg-muted">
             <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-2.5 font-semibold">Nome</th>
               <th className="px-4 py-2.5 font-semibold">Telefone</th>
@@ -64,10 +64,10 @@ export default function CustomersPage() {
             {items.map((c) => (
               <tr key={c.id} className="border-t" data-testid={`customer-row-${c.id}`}>
                 <td className="px-4 py-3 font-medium">{c.name}</td>
-                <td className="px-4 py-3 text-slate-600">{c.phone || "—"}</td>
-                <td className="px-4 py-3 text-slate-600 line-clamp-1">{c.notes || "—"}</td>
+                <td className="px-4 py-3 text-muted-foreground">{c.phone || "—"}</td>
+                <td className="px-4 py-3 text-muted-foreground line-clamp-1">{c.notes || "—"}</td>
                 <td className="px-4 py-3">
-                  <button onClick={() => openEdit(c)} data-testid={`edit-customer-${c.id}`} className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-900">
+                  <button onClick={() => openEdit(c)} data-testid={`edit-customer-${c.id}`} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
                     <Pencil className="w-4 h-4" />
                   </button>
                 </td>

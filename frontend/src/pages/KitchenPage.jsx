@@ -77,7 +77,7 @@ export default function KitchenPage() {
             <ChefHat className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight text-slate-900">Cozinha</h1>
+            <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight text-foreground">Cozinha</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
               {grouped.new.length} novo{grouped.new.length !== 1 ? "s" : ""} · {grouped.in_preparation.length} em preparo
             </p>
@@ -90,11 +90,11 @@ export default function KitchenPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Coluna: Novos */}
-        <section data-testid="column-kitchen-new" className="bg-white border-2 border-blue-200 rounded-lg overflow-hidden">
-          <div className="px-5 py-4 border-b-2 border-blue-200 bg-blue-50">
+        <section data-testid="column-kitchen-new" className="bg-card border-2 border-blue-200 dark:border-blue-900 rounded-lg overflow-hidden">
+          <div className="px-5 py-4 border-b-2 border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950">
             <div className="flex items-center justify-between">
-              <h2 className="font-display font-bold text-lg text-blue-900">Novos</h2>
-              <span className="text-2xl font-display font-bold text-blue-700" data-testid="count-new">{grouped.new.length}</span>
+              <h2 className="font-display font-bold text-lg text-blue-900 dark:text-blue-200">Novos</h2>
+              <span className="text-2xl font-display font-bold text-blue-700 dark:text-blue-400" data-testid="count-new">{grouped.new.length}</span>
             </div>
           </div>
           <div className="p-4 space-y-4 min-h-[300px] max-h-[calc(100vh-260px)] overflow-y-auto">
@@ -118,11 +118,11 @@ export default function KitchenPage() {
         </section>
 
         {/* Coluna: Em preparo */}
-        <section data-testid="column-kitchen-in-prep" className="bg-white border-2 border-orange-300 rounded-lg overflow-hidden">
-          <div className="px-5 py-4 border-b-2 border-orange-300 bg-orange-50">
+        <section data-testid="column-kitchen-in-prep" className="bg-card border-2 border-orange-300 dark:border-orange-800 rounded-lg overflow-hidden">
+          <div className="px-5 py-4 border-b-2 border-orange-300 dark:border-orange-800 bg-orange-50 dark:bg-orange-950">
             <div className="flex items-center justify-between">
-              <h2 className="font-display font-bold text-lg text-orange-900">Em preparo</h2>
-              <span className="text-2xl font-display font-bold text-orange-700" data-testid="count-in-prep">{grouped.in_preparation.length}</span>
+              <h2 className="font-display font-bold text-lg text-orange-900 dark:text-orange-200">Em preparo</h2>
+              <span className="text-2xl font-display font-bold text-orange-700 dark:text-orange-400" data-testid="count-in-prep">{grouped.in_preparation.length}</span>
             </div>
           </div>
           <div className="p-4 space-y-4 min-h-[300px] max-h-[calc(100vh-260px)] overflow-y-auto">
@@ -153,11 +153,11 @@ function KitchenCard({ order, elapsed, accent = "blue", children }) {
   return (
     <article
       data-testid={`kitchen-order-${order.order_number}`}
-      className={`border rounded-lg overflow-hidden bg-white shadow-sm ${accent === "orange" ? "border-orange-200" : "border-slate-200"}`}
+      className={`border rounded-lg overflow-hidden bg-card shadow-sm ${accent === "orange" ? "border-orange-200 dark:border-orange-900" : "border-slate-200 dark:border-slate-700"}`}
     >
-      <header className="px-4 py-3 flex items-center justify-between bg-slate-50 border-b">
-        <div className="font-display font-bold text-2xl text-slate-900">#{order.order_number}</div>
-        <div className="flex items-center gap-1.5 text-sm text-slate-600">
+      <header className="px-4 py-3 flex items-center justify-between bg-muted border-b">
+        <div className="font-display font-bold text-2xl text-foreground">#{order.order_number}</div>
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Clock className="w-4 h-4" /> {formatTime(order.created_at)} · <span className="font-medium">{elapsed}</span>
         </div>
       </header>
@@ -169,9 +169,9 @@ function KitchenCard({ order, elapsed, accent = "blue", children }) {
                 {i.quantity}×
               </span>
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-base text-slate-900 leading-tight">{i.product_name}</div>
+                <div className="font-medium text-base text-foreground leading-tight">{i.product_name}</div>
                 {i.notes && (
-                  <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-1 inline-block">
+                  <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 dark:text-amber-300 dark:bg-amber-950 dark:border-amber-900 rounded px-2 py-1 mt-1 inline-block">
                     ⚑ {i.notes}
                   </div>
                 )}
@@ -180,7 +180,7 @@ function KitchenCard({ order, elapsed, accent = "blue", children }) {
           ))}
         </ul>
         {order.notes && (
-          <div className="mt-3 text-sm bg-amber-50 border border-amber-200 rounded px-3 py-2 text-amber-900">
+          <div className="mt-3 text-sm bg-amber-50 border border-amber-200 rounded px-3 py-2 text-amber-900 dark:bg-amber-950 dark:border-amber-900 dark:text-amber-200">
             <span className="font-semibold">Obs. do pedido: </span>{order.notes}
           </div>
         )}

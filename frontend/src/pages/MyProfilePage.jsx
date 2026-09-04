@@ -13,7 +13,7 @@ export default function MyProfilePage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto">
       <PageHeader title="Meu Perfil" subtitle="Seus dados de acesso ao DACOT" />
-      <div className="bg-white border rounded-lg p-6 space-y-4">
+      <div className="bg-card border rounded-lg p-6 space-y-4">
         <Row label="Nome" value={user?.name} />
         <Row label="Email" value={user?.email} />
         <Row label="Papel" value={ROLE_LABEL[user?.role] || user?.role} />
@@ -28,7 +28,7 @@ function Row({ label, value }) {
   return (
     <div className="grid grid-cols-3 gap-4 text-sm">
       <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="col-span-2 text-slate-800">{value || "—"}</div>
+      <div className="col-span-2 text-foreground">{value || "—"}</div>
     </div>
   );
 }

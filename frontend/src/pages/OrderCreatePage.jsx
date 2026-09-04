@@ -130,7 +130,7 @@ export default function OrderCreatePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: product picker */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="bg-white border rounded-lg p-4">
+          <div className="bg-card border rounded-lg p-4">
             <div className="flex items-center gap-2 mb-3">
               <Search className="w-4 h-4 text-muted-foreground" />
               <Input
@@ -154,7 +154,7 @@ export default function OrderCreatePage() {
                   data-testid={`add-product-${p.id}`}
                   className="text-left border rounded-md p-3 hover:border-primary hover:bg-accent/40 transition-colors"
                 >
-                  <div className="font-medium text-sm text-slate-900 truncate">{p.name}</div>
+                  <div className="font-medium text-sm text-foreground truncate">{p.name}</div>
                   <div className="text-xs text-muted-foreground truncate">{p.category}</div>
                   <div className="text-sm font-semibold text-primary mt-1">{brl(p.price)}</div>
                 </button>
@@ -165,7 +165,7 @@ export default function OrderCreatePage() {
 
         {/* Right: resumo do pedido — itens (com destaque) primeiro, depois cliente/obs/desconto/total */}
         <aside className="space-y-4">
-          <div className="bg-white border rounded-lg p-4">
+          <div className="bg-card border rounded-lg p-4">
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
               Itens do pedido {items.length > 0 && `(${items.length})`}
             </div>
@@ -179,7 +179,7 @@ export default function OrderCreatePage() {
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium truncate">{i.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {brl(i.unit_price)} × {i.quantity} = <span className="font-medium text-slate-900">{brl(i.unit_price * i.quantity)}</span>
+                          {brl(i.unit_price)} × {i.quantity} = <span className="font-medium text-foreground">{brl(i.unit_price * i.quantity)}</span>
                         </div>
                       </div>
                       <button onClick={() => removeItem(i.product_id)} data-testid={`remove-${i.product_id}`} className="p-2 -m-1 text-muted-foreground hover:text-destructive">
@@ -187,11 +187,11 @@ export default function OrderCreatePage() {
                       </button>
                     </div>
                     <div className="flex items-center gap-2 mt-2">
-                      <button onClick={() => updateQty(i.product_id, -1)} data-testid={`dec-${i.product_id}`} className="w-10 h-10 border rounded hover:bg-slate-50 flex items-center justify-center shrink-0">
+                      <button onClick={() => updateQty(i.product_id, -1)} data-testid={`dec-${i.product_id}`} className="w-10 h-10 border rounded hover:bg-muted flex items-center justify-center shrink-0">
                         <Minus className="w-4 h-4" />
                       </button>
                       <span className="text-sm font-semibold w-6 text-center">{i.quantity}</span>
-                      <button onClick={() => updateQty(i.product_id, 1)} data-testid={`inc-${i.product_id}`} className="w-10 h-10 border rounded hover:bg-slate-50 flex items-center justify-center shrink-0">
+                      <button onClick={() => updateQty(i.product_id, 1)} data-testid={`inc-${i.product_id}`} className="w-10 h-10 border rounded hover:bg-muted flex items-center justify-center shrink-0">
                         <Plus className="w-4 h-4" />
                       </button>
                       <Input
@@ -208,7 +208,7 @@ export default function OrderCreatePage() {
             )}
           </div>
 
-          <div className="bg-white border rounded-lg p-4">
+          <div className="bg-card border rounded-lg p-4">
             <Label>Cliente (opcional)</Label>
             <Select
               value={customerId}
@@ -247,7 +247,7 @@ export default function OrderCreatePage() {
             }}
           />
 
-          <div className="bg-white border rounded-lg p-4 space-y-3">
+          <div className="bg-card border rounded-lg p-4 space-y-3">
             <div>
               <Label>Observações do pedido</Label>
               <Textarea
@@ -295,7 +295,7 @@ export default function OrderCreatePage() {
             </div>
 
             <div className="flex items-center justify-between rounded-md bg-accent/50 border border-primary/20 px-3 py-2.5">
-              <span className="text-sm font-semibold text-slate-700">Total</span>
+              <span className="text-sm font-semibold text-foreground">Total</span>
               <span className="font-display text-xl font-bold text-primary" data-testid="total">{brl(total)}</span>
             </div>
 

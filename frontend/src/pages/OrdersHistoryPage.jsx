@@ -75,10 +75,10 @@ export default function OrdersHistoryPage() {
         </Select>
       </div>
 
-      <div className="bg-white border rounded-lg overflow-hidden">
+      <div className="bg-card border rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-sm">
-          <thead className="bg-slate-50">
+          <thead className="bg-muted">
             <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-2.5 font-semibold">Pedido</th>
               <th className="px-4 py-2.5 font-semibold">Cliente</th>
@@ -102,17 +102,17 @@ export default function OrdersHistoryPage() {
               </td></tr>
             )}
             {orders.map((o) => (
-              <tr key={o.id} className="border-t hover:bg-slate-50/50" data-testid={`history-row-${o.order_number}`}>
+              <tr key={o.id} className="border-t hover:bg-muted/50" data-testid={`history-row-${o.order_number}`}>
                 <td className="px-4 py-3">
                   <Link to={`/pedidos/${o.id}`} className="font-display font-semibold text-primary hover:underline">
                     #{o.order_number}
                   </Link>
                 </td>
-                <td className="px-4 py-3 text-slate-700">
+                <td className="px-4 py-3 text-foreground">
                   {o.customer_name || <span className="text-muted-foreground italic">—</span>}
                 </td>
-                <td className="px-4 py-3 text-slate-600">{formatDateTime(o.created_at)}</td>
-                <td className="px-4 py-3 text-right text-slate-600">{o.items.length}</td>
+                <td className="px-4 py-3 text-muted-foreground">{formatDateTime(o.created_at)}</td>
+                <td className="px-4 py-3 text-right text-muted-foreground">{o.items.length}</td>
                 <td className="px-4 py-3 text-right font-medium">{brl(o.total)}</td>
                 <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
               </tr>

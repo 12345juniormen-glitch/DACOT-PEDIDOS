@@ -16,7 +16,7 @@ export function PageHeader({ title, subtitle, action, onBack, backLabel = "Volta
           </Button>
         )}
         <div>
-          <h1 data-testid={testId} className="text-xl sm:text-2xl font-display font-bold tracking-tight text-slate-900">
+          <h1 data-testid={testId} className="text-xl sm:text-2xl font-display font-bold tracking-tight text-foreground">
             {title}
           </h1>
           {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}

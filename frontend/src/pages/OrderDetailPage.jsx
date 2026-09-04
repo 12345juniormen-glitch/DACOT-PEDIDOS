@@ -102,7 +102,7 @@ export default function OrderDetailPage() {
       <header className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Pedido</div>
-          <h1 className="text-3xl font-display font-bold tracking-tight text-slate-900" data-testid="order-number">
+          <h1 className="text-3xl font-display font-bold tracking-tight text-foreground" data-testid="order-number">
             #{order.order_number}
           </h1>
           <div className="text-sm text-muted-foreground mt-1">
@@ -125,7 +125,7 @@ export default function OrderDetailPage() {
           {cancellable && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" className="text-destructive border-destructive/30 hover:bg-rose-50" data-testid="cancel-order-button">
+                <Button variant="outline" size="sm" className="text-destructive border-destructive/30 hover:bg-rose-50 dark:hover:bg-rose-950" data-testid="cancel-order-button">
                   <XCircle className="w-4 h-4 mr-1.5" /> Cancelar
                 </Button>
               </AlertDialogTrigger>
@@ -184,7 +184,7 @@ export default function OrderDetailPage() {
       )}
 
       {/* Items */}
-      <div className="bg-white border rounded-lg overflow-hidden">
+      <div className="bg-card border rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b text-xs font-semibold uppercase tracking-wider text-muted-foreground">Itens</div>
         <div className="overflow-x-auto">
         <table className="w-full min-w-[480px] text-sm">
@@ -200,10 +200,10 @@ export default function OrderDetailPage() {
             {order.items.map((i, idx) => (
               <tr key={idx} className="border-b last:border-0" data-testid={`order-item-${idx}`}>
                 <td className="px-4 py-3">
-                  <div className="font-medium text-slate-900">{i.product_name}</div>
+                  <div className="font-medium text-foreground">{i.product_name}</div>
                   {i.notes && <div className="text-xs text-muted-foreground mt-0.5">{i.notes}</div>}
                 </td>
-                <td className="px-4 py-3 text-right text-slate-700">{brl(i.unit_price)}</td>
+                <td className="px-4 py-3 text-right text-foreground">{brl(i.unit_price)}</td>
                 <td className="px-4 py-3 text-right">{i.quantity}</td>
                 <td className="px-4 py-3 text-right font-medium">{brl(i.line_total)}</td>
               </tr>
@@ -211,9 +211,9 @@ export default function OrderDetailPage() {
           </tbody>
         </table>
         </div>
-        <div className="px-4 py-3 border-t bg-slate-50/50">
+        <div className="px-4 py-3 border-t bg-muted/50">
           {order.notes && (
-            <div className="text-sm text-slate-700 mb-3">
+            <div className="text-sm text-foreground mb-3">
               <span className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mr-2">Obs:</span>
               {order.notes}
             </div>
@@ -230,7 +230,7 @@ export default function OrderDetailPage() {
                 </div>
               </div>
               <div className="flex items-center justify-between rounded-md bg-accent/50 border border-primary/20 px-3 py-2.5">
-                <span className="text-sm font-semibold text-slate-700">Total</span>
+                <span className="text-sm font-semibold text-foreground">Total</span>
                 <span className="font-display text-xl font-bold text-primary" data-testid="order-total">{brl(order.total)}</span>
               </div>
             </div>

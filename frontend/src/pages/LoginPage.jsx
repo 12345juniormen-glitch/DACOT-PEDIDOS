@@ -51,7 +51,7 @@ export default function LoginPage() {
               <div className="text-[11px] text-muted-foreground mt-1">Sistema para restaurantes</div>
             </div>
           </div>
-          <h1 className="text-2xl font-display font-bold text-slate-900">Entrar</h1>
+          <h1 className="text-2xl font-display font-bold text-foreground">Entrar</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Acesse o painel de pedidos do seu restaurante.
           </p>
@@ -84,7 +84,7 @@ export default function LoginPage() {
             {error && (
               <div
                 data-testid="login-error"
-                className="text-sm text-destructive bg-rose-50 border border-rose-200 rounded-md px-3 py-2"
+                className="text-sm text-destructive bg-rose-50 border border-rose-200 dark:bg-rose-950 dark:border-rose-900 rounded-md px-3 py-2"
               >
                 {error}
               </div>
