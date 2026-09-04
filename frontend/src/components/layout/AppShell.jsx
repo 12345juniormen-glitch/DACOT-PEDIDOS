@@ -34,14 +34,14 @@ export function AppShell({ children }) {
         <nav className="flex-1 p-3 space-y-1">
           {items.map(({ to, label, icon: Icon, testid, end }) => (
             <NavLink key={to} to={to} end={end} data-testid={testid}
-              className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive ? "bg-accent text-accent-foreground" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
+              className={({ isActive }) => `flex items-center gap-3 pl-2.5 pr-3 py-2 rounded-md text-sm font-medium border-l-2 transition-colors ${isActive ? "border-primary bg-accent/60 text-slate-900" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
               <Icon className="w-4 h-4" />{label}
             </NavLink>
           ))}
         </nav>
         <div className="border-t p-3">
           <NavLink to="/meu-perfil" className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-slate-50" data-testid="nav-profile">
-            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-700 text-xs font-semibold">{(user?.name || "?").slice(0, 1).toUpperCase()}</div>
+            <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-accent-foreground text-xs font-semibold shrink-0">{(user?.name || "?").slice(0, 1).toUpperCase()}</div>
             <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{user?.name}</div><div className="text-xs text-muted-foreground truncate">{ROLE_LABEL[user?.role]}</div></div>
             <UserCircle className="w-4 h-4 text-slate-400" />
           </NavLink>
@@ -72,14 +72,14 @@ export function AppShell({ children }) {
           <nav className="flex-1 p-3 space-y-1">
             {items.map(({ to, label, icon: Icon, testid, end }) => (
               <NavLink key={to} to={to} end={end} data-testid={`mobile-${testid}`} onClick={() => setMobileNavOpen(false)}
-                className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive ? "bg-accent text-accent-foreground" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
+                className={({ isActive }) => `flex items-center gap-3 pl-2.5 pr-3 py-2.5 rounded-md text-sm font-medium border-l-2 transition-colors ${isActive ? "border-primary bg-accent/60 text-slate-900" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
                 <Icon className="w-4 h-4" />{label}
               </NavLink>
             ))}
           </nav>
           <div className="border-t p-3">
             <NavLink to="/meu-perfil" onClick={() => setMobileNavOpen(false)} className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-slate-50" data-testid="mobile-nav-profile">
-              <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-700 text-xs font-semibold">{(user?.name || "?").slice(0, 1).toUpperCase()}</div>
+              <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-accent-foreground text-xs font-semibold shrink-0">{(user?.name || "?").slice(0, 1).toUpperCase()}</div>
               <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{user?.name}</div><div className="text-xs text-muted-foreground truncate">{ROLE_LABEL[user?.role]}</div></div>
               <UserCircle className="w-4 h-4 text-slate-400" />
             </NavLink>

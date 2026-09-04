@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Plus, Pencil, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CustomerFormDialog } from "@/components/CustomerFormDialog";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 import { api, formatApiError } from "@/lib/api";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
@@ -27,15 +29,15 @@ export default function CustomersPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto">
-      <header className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight text-slate-900">Clientes</h1>
-          <p className="text-sm text-muted-foreground mt-1">Cadastro simples para vincular aos pedidos.</p>
-        </div>
-        <Button onClick={openCreate} data-testid="new-customer-button">
-          <Plus className="w-4 h-4 mr-1.5" /> Novo Cliente
-        </Button>
-      </header>
+      <PageHeader
+        title="Clientes"
+        subtitle="Cadastro para vincular aos pedidos"
+        action={
+          <Button onClick={openCreate} data-testid="new-customer-button">
+            <Plus className="w-4 h-4 mr-1.5" /> Novo Cliente
+          </Button>
+        }
+      />
 
       <div className="bg-white border rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
@@ -50,9 +52,13 @@ export default function CustomersPage() {
           </thead>
           <tbody>
             {items.length === 0 && (
-              <tr><td colSpan="4" className="px-4 py-12 text-center">
-                <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <div className="text-sm text-muted-foreground">Nenhum cliente cadastrado.</div>
+              <tr><td colSpan="4">
+                <EmptyState
+                  icon={Users}
+                  title="Nenhum cliente cadastrado"
+                  description="Clientes cadastrados aqui ficam disponíveis ao criar um pedido."
+                  action={<Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 mr-1.5" /> Novo Cliente</Button>}
+                />
               </td></tr>
             )}
             {items.map((c) => (

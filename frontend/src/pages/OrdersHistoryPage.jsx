@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Search } from "lucide-react";
+import { Search, ClipboardList } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -10,6 +10,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/StatusBadge";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 import { api, formatApiError } from "@/lib/api";
 import { brl, formatDateTime, STATUS_ORDER } from "@/lib/format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
@@ -44,10 +46,7 @@ export default function OrdersHistoryPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto">
-      <header className="mb-6">
-        <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight text-slate-900">Histórico de Pedidos</h1>
-        <p className="text-sm text-muted-foreground mt-1">Consulte todos os pedidos, ativos e concluídos.</p>
-      </header>
+      <PageHeader title="Histórico de Pedidos" subtitle="Consulte todos os pedidos, ativos e concluídos" />
 
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <div className="flex-1 relative">
@@ -94,8 +93,12 @@ export default function OrdersHistoryPage() {
               <tr><td colSpan="6" className="px-4 py-8 text-center text-sm text-muted-foreground">Carregando…</td></tr>
             )}
             {!loading && orders.length === 0 && (
-              <tr><td colSpan="6" className="px-4 py-8 text-center text-sm text-muted-foreground" data-testid="history-empty">
-                Nenhum pedido encontrado.
+              <tr><td colSpan="6" data-testid="history-empty">
+                <EmptyState
+                  icon={ClipboardList}
+                  title="Nenhum pedido encontrado"
+                  description={statusFilter !== "all" || search ? "Tente ajustar a busca ou o filtro de status." : "Os pedidos criados vão aparecer aqui."}
+                />
               </td></tr>
             )}
             {orders.map((o) => (

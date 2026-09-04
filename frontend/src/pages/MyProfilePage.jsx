@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { KeyRound } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
 import { useAuth } from "@/context/AuthContext";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 
@@ -11,7 +12,7 @@ export default function MyProfilePage() {
   const { user } = useAuth();
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto">
-      <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight text-slate-900 mb-6">Meu Perfil</h1>
+      <PageHeader title="Meu Perfil" subtitle="Seus dados de acesso ao DACOT" />
       <div className="bg-white border rounded-lg p-6 space-y-4">
         <Row label="Nome" value={user?.name} />
         <Row label="Email" value={user?.email} />

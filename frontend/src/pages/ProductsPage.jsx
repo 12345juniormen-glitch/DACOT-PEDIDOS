@@ -13,6 +13,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
+import { ActivePill } from "@/components/StatusBadge";
 import { api, formatApiError } from "@/lib/api";
 import { brl } from "@/lib/format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
@@ -77,15 +80,15 @@ export default function ProductsPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto">
-      <header className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight text-slate-900">Produtos</h1>
-          <p className="text-sm text-muted-foreground mt-1">Cadastro básico do cardápio.</p>
-        </div>
-        <Button onClick={openCreate} data-testid="new-product-button">
-          <Plus className="w-4 h-4 mr-1.5" /> Novo Produto
-        </Button>
-      </header>
+      <PageHeader
+        title="Produtos"
+        subtitle="Cadastro do cardápio usado nos pedidos"
+        action={
+          <Button onClick={openCreate} data-testid="new-product-button">
+            <Plus className="w-4 h-4 mr-1.5" /> Novo Produto
+          </Button>
+        }
+      />
 
       <div className="bg-white border rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
@@ -101,9 +104,13 @@ export default function ProductsPage() {
           </thead>
           <tbody>
             {products.length === 0 && (
-              <tr><td colSpan="5" className="px-4 py-12 text-center">
-                <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <div className="text-sm text-muted-foreground">Nenhum produto cadastrado.</div>
+              <tr><td colSpan="5">
+                <EmptyState
+                  icon={Package}
+                  title="Nenhum produto cadastrado"
+                  description="Cadastre o primeiro produto para começar a montar pedidos."
+                  action={<Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 mr-1.5" /> Novo Produto</Button>}
+                />
               </td></tr>
             )}
             {products.map((p) => (
@@ -114,11 +121,7 @@ export default function ProductsPage() {
                 </td>
                 <td className="px-4 py-3 text-slate-600">{p.category}</td>
                 <td className="px-4 py-3 text-right font-medium">{brl(p.price)}</td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${p.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                    {p.active ? "Ativo" : "Inativo"}
-                  </span>
-                </td>
+                <td className="px-4 py-3"><ActivePill active={p.active} /></td>
                 <td className="px-4 py-3">
                   <button onClick={() => openEdit(p)} data-testid={`edit-product-${p.id}`} className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-900">
                     <Pencil className="w-4 h-4" />

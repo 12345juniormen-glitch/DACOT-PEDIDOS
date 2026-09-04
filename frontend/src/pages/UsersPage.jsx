@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Pencil, KeyRound, ShieldCheck } from "lucide-react";
+import { Plus, Pencil, KeyRound, ShieldCheck, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,9 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { api, formatApiError } from "@/lib/api";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
+import { ActivePill } from "@/components/StatusBadge";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -70,13 +73,11 @@ export default function UsersPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto">
-      <header className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight text-slate-900">Usuários</h1>
-          <p className="text-sm text-muted-foreground mt-1">Gerencie a equipe do restaurante.</p>
-        </div>
-        <Button onClick={() => setOpenCreate(true)} data-testid="new-user-button"><Plus className="w-4 h-4 mr-1.5" /> Novo Usuário</Button>
-      </header>
+      <PageHeader
+        title="Usuários"
+        subtitle="Gerencie a equipe do restaurante"
+        action={<Button onClick={() => setOpenCreate(true)} data-testid="new-user-button"><Plus className="w-4 h-4 mr-1.5" /> Novo Usuário</Button>}
+      />
 
       <div className="bg-white border rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
@@ -91,12 +92,23 @@ export default function UsersPage() {
             </tr>
           </thead>
           <tbody>
+            {users.length === 0 && (
+              <tr><td colSpan="5">
+                <EmptyState
+                  icon={Users}
+                  title="Nenhum usuário cadastrado"
+                  action={<Button size="sm" onClick={() => setOpenCreate(true)}><Plus className="w-4 h-4 mr-1.5" /> Novo Usuário</Button>}
+                />
+              </td></tr>
+            )}
             {users.map((u) => (
               <tr key={u.id} className="border-t" data-testid={`user-row-${u.id}`}>
-                <td className="px-4 py-3 font-medium flex items-center gap-2">{u.name}{u.must_change_password && <span title="Senha temporária" className="text-amber-600"><ShieldCheck className="w-3.5 h-3.5" /></span>}</td>
+                <td className="px-4 py-3 font-medium">
+                  <span className="flex items-center gap-2">{u.name}{u.must_change_password && <span title="Senha temporária" className="text-amber-600"><ShieldCheck className="w-3.5 h-3.5" /></span>}</span>
+                </td>
                 <td className="px-4 py-3 text-slate-600">{u.email}</td>
                 <td className="px-4 py-3 text-slate-700">{ROLE_LABEL[u.role]}</td>
-                <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full ${u.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{u.active ? "Ativo" : "Inativo"}</span></td>
+                <td className="px-4 py-3"><ActivePill active={u.active} /></td>
                 <td className="px-4 py-3">
                   <button onClick={() => { setTarget(u); setEditForm({ name: u.name, role: u.role, active: u.active }); setOpenEdit(true); }} data-testid={`edit-user-${u.id}`} className="p-1.5 rounded hover:bg-slate-100 text-slate-500" title="Editar"><Pencil className="w-4 h-4" /></button>
                   <button onClick={() => { setTarget(u); setTempPw(""); setOpenReset(true); }} data-testid={`reset-user-${u.id}`} className="p-1.5 rounded hover:bg-slate-100 text-slate-500 ml-1" title="Redefinir senha"><KeyRound className="w-4 h-4" /></button>

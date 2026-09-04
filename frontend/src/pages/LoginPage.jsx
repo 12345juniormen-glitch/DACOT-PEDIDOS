@@ -4,9 +4,13 @@ import { UtensilsCrossed, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { STATUS_ICON } from "@/components/StatusBadge";
 import { useAuth } from "@/context/AuthContext";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { STATUS_LABEL } from "@/lib/format";
 import { toast } from "sonner";
+
+const FLOW = ["new", "in_preparation", "ready", "delivered"];
 
 export default function LoginPage() {
   useDocumentTitle("Login");
@@ -97,23 +101,32 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Right panel: brand block */}
-      <div className="hidden lg:flex items-center justify-center relative bg-gradient-to-br from-orange-500 to-orange-600 text-white p-12">
-        <div className="max-w-md">
-          <div className="inline-flex items-center px-3 py-1 rounded-full bg-white/15 text-xs font-medium mb-6">
-            Primeiro módulo · Pedidos
+      {/* Right panel: identidade — sólido, sem gradiente; o laranja aparece só como acento */}
+      <div className="hidden lg:flex items-center justify-center bg-slate-900 text-white p-12">
+        <div className="max-w-sm">
+          <div className="w-11 h-11 rounded-md bg-primary text-primary-foreground flex items-center justify-center mb-6">
+            <UtensilsCrossed className="w-5 h-5" />
           </div>
-          <h2 className="font-display text-3xl font-extrabold leading-tight tracking-tight">
-            Centralize seus pedidos.<br />Ganhe agilidade no salão e na cozinha.
+          <h2 className="font-display text-2xl font-bold leading-snug">
+            Gestão de pedidos para o salão e a cozinha.
           </h2>
-          <p className="text-white/85 mt-4 text-sm leading-relaxed">
-            Chega de comandas perdidas em papel. Acompanhe cada pedido do "Novo" até o "Entregue" em um único painel — e mantenha todo o histórico à mão.
+          <p className="text-slate-400 mt-3 text-sm leading-relaxed">
+            Cada pedido acompanhado do início ao fim, com preço registrado no momento da venda e histórico sempre disponível.
           </p>
-          <ul className="mt-8 space-y-2 text-sm text-white/90">
-            <li>· Pedidos com status em tempo real</li>
-            <li>· Preço registrado no momento do pedido</li>
-            <li>· Histórico consultável a qualquer momento</li>
-          </ul>
+          <ol className="mt-10 space-y-3">
+            {FLOW.map((s, idx) => {
+              const Icon = STATUS_ICON[s];
+              return (
+                <li key={s} className="flex items-center gap-3 text-sm text-slate-300">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 text-xs font-semibold text-slate-400 shrink-0">
+                    {idx + 1}
+                  </span>
+                  <Icon className="w-4 h-4 text-primary shrink-0" />
+                  <span>{STATUS_LABEL[s]}</span>
+                </li>
+              );
+            })}
+          </ol>
         </div>
       </div>
     </div>

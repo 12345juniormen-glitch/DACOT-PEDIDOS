@@ -95,11 +95,9 @@ export default function OrderDetailPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="sm" onClick={() => nav(-1)} data-testid="back-button">
-          <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
-        </Button>
-      </div>
+      <Button variant="ghost" size="sm" onClick={() => nav(-1)} data-testid="back-button" className="-ml-2 mb-3">
+        <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
+      </Button>
 
       <header className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
@@ -221,16 +219,19 @@ export default function OrderDetailPage() {
             </div>
           )}
           <div className="flex justify-end">
-            <div className="w-full sm:w-72 space-y-1 text-sm">
-              <div className="flex justify-between text-muted-foreground">
-                <span>Subtotal</span><span>{brl(order.subtotal)}</span>
+            <div className="w-full sm:w-72 space-y-2">
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Subtotal</span><span>{brl(order.subtotal)}</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Desconto {order.discount_type === "percent" ? `(${order.discount_value}%)` : ""}</span>
+                  <span>− {brl(order.discount_amount)}</span>
+                </div>
               </div>
-              <div className="flex justify-between text-muted-foreground">
-                <span>Desconto {order.discount_type === "percent" ? `(${order.discount_value}%)` : ""}</span>
-                <span>− {brl(order.discount_amount)}</span>
-              </div>
-              <div className="flex justify-between font-display text-lg font-bold text-slate-900 border-t pt-1.5">
-                <span>Total</span><span data-testid="order-total">{brl(order.total)}</span>
+              <div className="flex items-center justify-between rounded-md bg-accent/50 border border-primary/20 px-3 py-2.5">
+                <span className="text-sm font-semibold text-slate-700">Total</span>
+                <span className="font-display text-xl font-bold text-primary" data-testid="order-total">{brl(order.total)}</span>
               </div>
             </div>
           </div>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Minus, Trash2, Search, UserPlus } from "lucide-react";
+import { Plus, Minus, Trash2, Search, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CustomerFormDialog } from "@/components/CustomerFormDialog";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 import { api, formatApiError } from "@/lib/api";
 import { brl } from "@/lib/format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
@@ -123,15 +125,7 @@ export default function OrderCreatePage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="sm" onClick={() => nav(-1)} data-testid="back-button">
-          <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
-        </Button>
-        <div>
-          <h1 className="text-2xl font-display font-bold tracking-tight text-slate-900">Novo Pedido</h1>
-          <p className="text-sm text-muted-foreground">Selecione cliente e produtos</p>
-        </div>
-      </div>
+      <PageHeader title="Novo Pedido" subtitle="Selecione produtos e revise antes de criar" onBack={() => nav(-1)} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: product picker */}
@@ -147,10 +141,10 @@ export default function OrderCreatePage() {
                 className="border-0 shadow-none focus-visible:ring-0 px-0"
               />
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 lg:max-h-[420px] lg:overflow-y-auto">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 lg:max-h-[480px] lg:overflow-y-auto">
               {filteredProducts.length === 0 && (
-                <div className="col-span-full text-center text-sm text-muted-foreground py-8">
-                  Nenhum produto ativo. Cadastre em <b>Produtos</b>.
+                <div className="col-span-full">
+                  <EmptyState title="Nenhum produto ativo" description="Cadastre produtos na tela Produtos para começar a montar pedidos." compact />
                 </div>
               )}
               {filteredProducts.map((p) => (
@@ -169,8 +163,51 @@ export default function OrderCreatePage() {
           </div>
         </div>
 
-        {/* Right: cart summary */}
+        {/* Right: resumo do pedido — itens (com destaque) primeiro, depois cliente/obs/desconto/total */}
         <aside className="space-y-4">
+          <div className="bg-white border rounded-lg p-4">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+              Itens do pedido {items.length > 0 && `(${items.length})`}
+            </div>
+            {items.length === 0 ? (
+              <EmptyState title="Nenhum item ainda" description="Toque em um produto ao lado para adicionar ao pedido." compact />
+            ) : (
+              <div className="space-y-2" data-testid="cart-items">
+                {items.map((i) => (
+                  <div key={i.product_id} className="border rounded-md p-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{i.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {brl(i.unit_price)} × {i.quantity} = <span className="font-medium text-slate-900">{brl(i.unit_price * i.quantity)}</span>
+                        </div>
+                      </div>
+                      <button onClick={() => removeItem(i.product_id)} data-testid={`remove-${i.product_id}`} className="p-2 -m-1 text-muted-foreground hover:text-destructive">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <button onClick={() => updateQty(i.product_id, -1)} data-testid={`dec-${i.product_id}`} className="w-10 h-10 border rounded hover:bg-slate-50 flex items-center justify-center shrink-0">
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <span className="text-sm font-semibold w-6 text-center">{i.quantity}</span>
+                      <button onClick={() => updateQty(i.product_id, 1)} data-testid={`inc-${i.product_id}`} className="w-10 h-10 border rounded hover:bg-slate-50 flex items-center justify-center shrink-0">
+                        <Plus className="w-4 h-4" />
+                      </button>
+                      <Input
+                        placeholder="Obs. do item"
+                        value={i.notes}
+                        onChange={(e) => updateItemNotes(i.product_id, e.target.value)}
+                        className="h-9 text-xs ml-1"
+                        data-testid={`item-notes-${i.product_id}`}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="bg-white border rounded-lg p-4">
             <Label>Cliente (opcional)</Label>
             <Select
@@ -210,49 +247,6 @@ export default function OrderCreatePage() {
             }}
           />
 
-          <div className="bg-white border rounded-lg p-4">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Itens</div>
-            {items.length === 0 ? (
-              <div className="text-sm text-muted-foreground text-center py-6">
-                Toque em um produto para adicionar.
-              </div>
-            ) : (
-              <div className="space-y-2" data-testid="cart-items">
-                {items.map((i) => (
-                  <div key={i.product_id} className="border rounded-md p-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{i.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {brl(i.unit_price)} × {i.quantity} = <span className="font-medium text-slate-900">{brl(i.unit_price * i.quantity)}</span>
-                        </div>
-                      </div>
-                      <button onClick={() => removeItem(i.product_id)} data-testid={`remove-${i.product_id}`} className="p-2 -m-1 text-muted-foreground hover:text-destructive">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2 mt-2">
-                      <button onClick={() => updateQty(i.product_id, -1)} data-testid={`dec-${i.product_id}`} className="w-9 h-9 border rounded hover:bg-slate-50 flex items-center justify-center shrink-0">
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="text-sm font-medium w-6 text-center">{i.quantity}</span>
-                      <button onClick={() => updateQty(i.product_id, 1)} data-testid={`inc-${i.product_id}`} className="w-9 h-9 border rounded hover:bg-slate-50 flex items-center justify-center shrink-0">
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                      <Input
-                        placeholder="Obs. do item"
-                        value={i.notes}
-                        onChange={(e) => updateItemNotes(i.product_id, e.target.value)}
-                        className="h-7 text-xs ml-1"
-                        data-testid={`item-notes-${i.product_id}`}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
           <div className="bg-white border rounded-lg p-4 space-y-3">
             <div>
               <Label>Observações do pedido</Label>
@@ -291,22 +285,24 @@ export default function OrderCreatePage() {
               </div>
             </div>
 
-            <div className="border-t pt-3 space-y-1.5 text-sm">
+            <div className="space-y-1.5 text-sm pt-1">
               <div className="flex justify-between text-muted-foreground">
                 <span>Subtotal</span><span data-testid="subtotal">{brl(subtotal)}</span>
               </div>
               <div className="flex justify-between text-muted-foreground">
                 <span>Desconto</span><span data-testid="discount-amount">− {brl(discountAmount)}</span>
               </div>
-              <div className="flex justify-between font-display text-lg font-bold text-slate-900 pt-1">
-                <span>Total</span><span data-testid="total">{brl(total)}</span>
-              </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-md bg-accent/50 border border-primary/20 px-3 py-2.5">
+              <span className="text-sm font-semibold text-slate-700">Total</span>
+              <span className="font-display text-xl font-bold text-primary" data-testid="total">{brl(total)}</span>
             </div>
 
             <Button
               onClick={submit}
               disabled={saving || items.length === 0}
-              className="w-full"
+              className="w-full h-11"
               data-testid="submit-order-button"
             >
               {saving ? "Salvando..." : "Criar Pedido"}
