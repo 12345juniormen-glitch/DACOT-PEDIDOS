@@ -73,7 +73,3 @@ h1, h2, h3, h4, .font-display {
 .status-ready      { @apply bg-emerald-50 text-emerald-700 border-emerald-200; }
 .status-delivered  { @apply bg-slate-100 text-slate-700 border-slate-200; }
 .status-cancelled  { @apply bg-rose-50 text-rose-700 border-rose-200; }
-
-@layer base {
-    [data-debug-wrapper="true"] { display: contents !important; }
-}

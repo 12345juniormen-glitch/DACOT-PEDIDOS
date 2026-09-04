@@ -15,9 +15,11 @@ import {
 } from "@/components/ui/select";
 import { api, formatApiError } from "@/lib/api";
 import { brl } from "@/lib/format";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 
 export default function OrderEditPage() {
+  useDocumentTitle("Editar Pedido");
   const { id } = useParams();
   const nav = useNavigate();
   const [order, setOrder] = useState(null);
@@ -58,6 +60,7 @@ export default function OrderEditPage() {
         nav("/");
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deve rodar só quando o id muda
   }, [id]);
 
   const filtered = useMemo(() => {

@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/AuthContext";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 
 export default function LoginPage() {
+  useDocumentTitle("Login");
   const { user, login, handoffError } = useAuth();
   const nav = useNavigate();
   const [email, setEmail] = useState("");
@@ -92,10 +94,6 @@ export default function LoginPage() {
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Entrar"}
             </Button>
           </form>
-
-          <div className="mt-6 text-xs text-muted-foreground border-t pt-4">
-  
-          </div>
         </div>
       </div>
 

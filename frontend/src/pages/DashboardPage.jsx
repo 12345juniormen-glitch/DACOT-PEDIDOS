@@ -9,6 +9,7 @@ import { brl, formatTime, STATUS_LABEL, NEXT_STATUS } from "@/lib/format";
 import { toast } from "sonner";
 
 import { useAuth } from "@/context/AuthContext";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 
 const COLUMNS = [
   { key: "new", label: "Novo" },
@@ -17,6 +18,7 @@ const COLUMNS = [
 ];
 
 export default function DashboardPage() {
+  useDocumentTitle("Dashboard");
   const { user } = useAuth();
   const canSeeFinance = user && (user.role === "admin" || user.role === "manager");
   const [orders, setOrders] = useState([]);
@@ -43,6 +45,7 @@ export default function DashboardPage() {
     load();
     const t = setInterval(load, 30000);
     return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deve rodar só na montagem; load muda a cada render
   }, []);
 
   const byStatus = useMemo(() => {

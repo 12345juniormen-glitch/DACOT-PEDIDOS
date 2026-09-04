@@ -2,10 +2,12 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { KeyRound } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 
 const ROLE_LABEL = { admin: "Administrador", manager: "Gerente", waiter: "Atendimento", kitchen: "Cozinha" };
 
 export default function MyProfilePage() {
+  useDocumentTitle("Meu Perfil");
   const { user } = useAuth();
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto">

@@ -16,11 +16,13 @@ import {
 import { CustomerFormDialog } from "@/components/CustomerFormDialog";
 import { api, formatApiError } from "@/lib/api";
 import { brl } from "@/lib/format";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 
 const CREATE_CUSTOMER = "__create_customer__";
 
 export default function OrderCreatePage() {
+  useDocumentTitle("Novo Pedido");
   const nav = useNavigate();
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);

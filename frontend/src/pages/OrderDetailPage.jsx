@@ -45,6 +45,7 @@ export default function OrderDetailPage() {
   const nav = useNavigate();
   const [order, setOrder] = useState(null);
   const [busy, setBusy] = useState(false);
+  useDocumentTitle(order ? `Pedido #${order.order_number}` : "Pedido");
 
   const load = async () => {
     try {
@@ -58,6 +59,7 @@ export default function OrderDetailPage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deve rodar só quando o id muda; load muda a cada render
   }, [id]);
 
   const changeStatus = async (status) => {

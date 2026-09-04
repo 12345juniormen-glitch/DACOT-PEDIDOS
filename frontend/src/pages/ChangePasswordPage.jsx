@@ -5,10 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UtensilsCrossed, ShieldAlert } from "lucide-react";
 import { api, formatApiError } from "@/lib/api";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
 export default function ChangePasswordPage({ forced = false }) {
+  useDocumentTitle("Alterar Senha");
   const { user, refresh, logout } = useAuth();
   const nav = useNavigate();
   const [current, setCurrent] = useState("");

@@ -12,9 +12,11 @@ import {
 import { StatusBadge } from "@/components/StatusBadge";
 import { api, formatApiError } from "@/lib/api";
 import { brl, formatDateTime, STATUS_ORDER } from "@/lib/format";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 
 export default function OrdersHistoryPage() {
+  useDocumentTitle("Histórico");
   const [orders, setOrders] = useState([]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -37,6 +39,7 @@ export default function OrdersHistoryPage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- busca por texto só dispara no Enter, não a cada tecla
   }, [statusFilter]);
 
   return (

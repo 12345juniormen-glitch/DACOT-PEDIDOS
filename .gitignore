@@ -83,6 +83,8 @@ android-sdk/
 .env
 .env.*
 *.env
+# Não é segredo: só desativa source maps no build de produção do frontend.
+!frontend/.env.production
 credentials.json
 *.key
 .credentials

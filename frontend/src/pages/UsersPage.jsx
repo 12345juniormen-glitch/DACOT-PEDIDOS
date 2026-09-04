@@ -11,6 +11,7 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { api, formatApiError } from "@/lib/api";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { Navigate } from "react-router-dom";
@@ -20,6 +21,7 @@ const ROLES = ["admin", "manager", "waiter", "kitchen"];
 const emptyCreate = { name: "", email: "", temp_password: "", role: "waiter" };
 
 export default function UsersPage() {
+  useDocumentTitle("Usuários");
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
   const [openCreate, setOpenCreate] = useState(false);

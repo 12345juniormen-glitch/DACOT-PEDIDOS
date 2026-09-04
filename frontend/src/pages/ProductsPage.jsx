@@ -15,11 +15,13 @@ import {
 } from "@/components/ui/dialog";
 import { api, formatApiError } from "@/lib/api";
 import { brl } from "@/lib/format";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 
 const empty = { name: "", description: "", price: "", category: "Geral", active: true };
 
 export default function ProductsPage() {
+  useDocumentTitle("Produtos");
   const [products, setProducts] = useState([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);

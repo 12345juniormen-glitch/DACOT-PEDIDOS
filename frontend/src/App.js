@@ -15,6 +15,7 @@ import UsersPage from "@/pages/UsersPage";
 import ChangePasswordPage from "@/pages/ChangePasswordPage";
 import MyProfilePage from "@/pages/MyProfilePage";
 import KitchenPage from "@/pages/KitchenPage";
+import NotFoundPage from "@/pages/NotFoundPage";
 import "@/App.css";
 
 function Shell({ children, roles }) {
@@ -58,6 +59,7 @@ function App() {
           <Route path="/usuarios" element={<Shell roles={["admin"]}><UsersPage /></Shell>} />
           <Route path="/cozinha" element={<Shell roles={["kitchen"]}><KitchenPage /></Shell>} />
           <Route path="/meu-perfil" element={<Shell><MyProfilePage /></Shell>} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

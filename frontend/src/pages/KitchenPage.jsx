@@ -3,12 +3,14 @@ import { RefreshCw, ChefHat, Play, Check, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api, formatApiError } from "@/lib/api";
 import { formatTime } from "@/lib/format";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 
 // KDS — visão exclusiva para cozinha.
 // Mostra apenas pedidos em `new` e `in_preparation`.
 // Ao marcar Pronto, o pedido sai da lista na próxima atualização.
 export default function KitchenPage() {
+  useDocumentTitle("Cozinha");
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null); // order id currently being updated

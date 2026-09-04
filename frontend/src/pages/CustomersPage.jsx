@@ -3,9 +3,11 @@ import { Plus, Pencil, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CustomerFormDialog } from "@/components/CustomerFormDialog";
 import { api, formatApiError } from "@/lib/api";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 
 export default function CustomersPage() {
+  useDocumentTitle("Clientes");
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
