@@ -1,4 +1,5 @@
 """DACOT Orders — handoff cross-tenant isolation & RBAC security tests (public URL)."""
+import concurrent.futures
 import os
 import time
 import uuid
@@ -342,3 +343,44 @@ class TestLocalAdminRegression:
     def test_wrong_password_rejected(self):
         r = requests.post(f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": "definitely-wrong"}, timeout=20)
         assert r.status_code in (400, 401, 429), r.text[:200]
+
+
+# ---------------- Regression: order_number allocation under concurrency ----------------
+class TestOrderNumberConcurrency:
+    """Guards against the read-max-then-insert race in _next_order_number
+    (two near-simultaneous POST /orders could previously be handed the same
+    order_number and one would blow up with a raw 500 on the unique index)."""
+
+    def test_concurrent_order_creation_gets_unique_sequential_numbers(self):
+        tenant_id = f"tenant-race-{uuid.uuid4().hex[:8]}"
+        r = exchange(sign_handoff(tenant_id, "admin"))
+        assert r.status_code == 200, r.text[:300]
+        headers = {"Authorization": f"Bearer {r.json()['token']}"}
+
+        p = requests.post(
+            f"{API}/products",
+            json={"name": "TEST_Race", "price": 10, "category": "TEST_C", "active": True},
+            headers=headers, timeout=20,
+        )
+        assert p.status_code == 201, p.text[:300]
+        product_id = p.json()["id"]
+
+        n = 20
+
+        def create_order(_):
+            return requests.post(
+                f"{API}/orders",
+                json={"items": [{"product_id": product_id, "quantity": 1}]},
+                headers=headers, timeout=20,
+            )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=n) as pool:
+            responses = list(pool.map(create_order, range(n)))
+
+        statuses = [resp.status_code for resp in responses]
+        assert statuses.count(201) == n, f"esperava {n} pedidos criados (201), status recebidos: {statuses}"
+
+        order_numbers = sorted(resp.json()["order_number"] for resp in responses)
+        assert len(set(order_numbers)) == n, f"order_number duplicado sob concorrência: {order_numbers}"
+        # tenant novo e exclusivo para este teste: a sequência deve começar em 1001 e ser contígua
+        assert order_numbers == list(range(1001, 1001 + n)), f"sequência quebrada: {order_numbers}"

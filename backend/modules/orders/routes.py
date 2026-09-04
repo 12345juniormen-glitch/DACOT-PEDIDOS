@@ -166,12 +166,45 @@ def _to_out(doc: dict) -> OrderOut:
 
 
 async def _next_order_number(db, restaurant_id: str) -> int:
-    last = await db.orders.find_one(
-        {"restaurant_id": restaurant_id},
-        sort=[("order_number", -1)],
-        projection={"order_number": 1},
+    """Atomically allocate the next order_number for a restaurant.
+
+    The previous implementation read the current max order_number and used
+    max+1 as the new one — a classic read-then-write race: two requests
+    arriving close together can read the same max and both try to insert the
+    same order_number, and only the unique (restaurant_id, order_number)
+    index on `orders` caught it, surfacing as an unhandled DuplicateKeyError
+    (raw HTTP 500).
+
+    This version keeps a per-restaurant counter in `order_counters` (`_id` =
+    restaurant_id, `seq` = last number issued) and allocates via a single
+    atomic `$inc` (findAndModify), which MongoDB serializes per document —
+    two concurrent callers can never be handed the same value. The counter
+    is bootstrapped once per restaurant from the current max order_number
+    (or 1000, so the first order is still 1001, preserving today's format
+    and sequence) via an idempotent `$setOnInsert` upsert; MongoDB itself
+    serializes concurrent upserts racing on the same _id, so the bootstrap
+    is race-safe too.
+    """
+    counters = db.order_counters
+    if await counters.find_one({"_id": restaurant_id}, {"_id": 1}) is None:
+        last = await db.orders.find_one(
+            {"restaurant_id": restaurant_id},
+            sort=[("order_number", -1)],
+            projection={"order_number": 1},
+        )
+        start = last["order_number"] if last else 1000
+        await counters.find_one_and_update(
+            {"_id": restaurant_id},
+            {"$setOnInsert": {"seq": start}},
+            upsert=True,
+        )
+    result = await counters.find_one_and_update(
+        {"_id": restaurant_id},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=True,
     )
-    return (last["order_number"] + 1) if last else 1001
+    return result["seq"]
 
 
 async def _load_customer(db, restaurant_id: str, customer_id: Optional[str]) -> tuple[Optional[str], Optional[str]]:
