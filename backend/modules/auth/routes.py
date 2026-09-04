@@ -49,6 +49,9 @@ async def login(payload: LoginInput):
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(payload.password, user["password_hash"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email ou senha inválidos")
+    if not user.get("active", True):
+        # Mesma mensagem genérica de credenciais inválidas: não revela que a conta existe e está desativada.
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email ou senha inválidos")
 
     token = create_access_token(
         user_id=user["id"],
