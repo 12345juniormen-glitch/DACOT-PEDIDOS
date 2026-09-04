@@ -59,7 +59,7 @@ export default function OrdersHistoryPage() {
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-56" data-testid="history-status-filter">
+          <SelectTrigger className="w-full sm:w-56" data-testid="history-status-filter">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -74,7 +74,8 @@ export default function OrdersHistoryPage() {
       </div>
 
       <div className="bg-white border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-slate-50">
             <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-2.5 font-semibold">Pedido</th>
@@ -112,6 +113,7 @@ export default function OrdersHistoryPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

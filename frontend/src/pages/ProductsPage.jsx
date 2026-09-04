@@ -86,7 +86,8 @@ export default function ProductsPage() {
       </header>
 
       <div className="bg-white border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-slate-50">
             <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-2.5 font-semibold">Produto</th>
@@ -125,6 +126,7 @@ export default function ProductsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>

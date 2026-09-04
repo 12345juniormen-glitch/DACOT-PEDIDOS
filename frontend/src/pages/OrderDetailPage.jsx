@@ -186,7 +186,8 @@ export default function OrderDetailPage() {
       {/* Items */}
       <div className="bg-white border rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b text-xs font-semibold uppercase tracking-wider text-muted-foreground">Itens</div>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[480px] text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b">
               <th className="px-4 py-2 font-semibold">Produto</th>
@@ -209,6 +210,7 @@ export default function OrderDetailPage() {
             ))}
           </tbody>
         </table>
+        </div>
         <div className="px-4 py-3 border-t bg-slate-50/50">
           {order.notes && (
             <div className="text-sm text-slate-700 mb-3">

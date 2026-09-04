@@ -145,7 +145,7 @@ export default function OrderCreatePage() {
                 className="border-0 shadow-none focus-visible:ring-0 px-0"
               />
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[420px] overflow-y-auto">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 lg:max-h-[420px] lg:overflow-y-auto">
               {filteredProducts.length === 0 && (
                 <div className="col-span-full text-center text-sm text-muted-foreground py-8">
                   Nenhum produto ativo. Cadastre em <b>Produtos</b>.
@@ -225,17 +225,17 @@ export default function OrderCreatePage() {
                           {brl(i.unit_price)} × {i.quantity} = <span className="font-medium text-slate-900">{brl(i.unit_price * i.quantity)}</span>
                         </div>
                       </div>
-                      <button onClick={() => removeItem(i.product_id)} data-testid={`remove-${i.product_id}`} className="p-1 text-muted-foreground hover:text-destructive">
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <button onClick={() => removeItem(i.product_id)} data-testid={`remove-${i.product_id}`} className="p-2 -m-1 text-muted-foreground hover:text-destructive">
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                     <div className="flex items-center gap-2 mt-2">
-                      <button onClick={() => updateQty(i.product_id, -1)} data-testid={`dec-${i.product_id}`} className="w-7 h-7 border rounded hover:bg-slate-50 flex items-center justify-center">
-                        <Minus className="w-3 h-3" />
+                      <button onClick={() => updateQty(i.product_id, -1)} data-testid={`dec-${i.product_id}`} className="w-9 h-9 border rounded hover:bg-slate-50 flex items-center justify-center shrink-0">
+                        <Minus className="w-3.5 h-3.5" />
                       </button>
                       <span className="text-sm font-medium w-6 text-center">{i.quantity}</span>
-                      <button onClick={() => updateQty(i.product_id, 1)} data-testid={`inc-${i.product_id}`} className="w-7 h-7 border rounded hover:bg-slate-50 flex items-center justify-center">
-                        <Plus className="w-3 h-3" />
+                      <button onClick={() => updateQty(i.product_id, 1)} data-testid={`inc-${i.product_id}`} className="w-9 h-9 border rounded hover:bg-slate-50 flex items-center justify-center shrink-0">
+                        <Plus className="w-3.5 h-3.5" />
                       </button>
                       <Input
                         placeholder="Obs. do item"

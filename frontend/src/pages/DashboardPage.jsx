@@ -127,7 +127,7 @@ export default function DashboardPage() {
                     <button
                       onClick={() => advance(o)}
                       data-testid={`advance-${o.order_number}`}
-                      className="mt-2 w-full text-xs font-medium text-primary hover:bg-accent rounded px-2 py-1.5 flex items-center justify-center gap-1"
+                      className="mt-2 w-full text-xs font-medium text-primary hover:bg-accent rounded px-2 py-2.5 flex items-center justify-center gap-1"
                     >
                       Avançar para {STATUS_LABEL[NEXT_STATUS[o.status]]} <ChevronRight className="w-3 h-3" />
                     </button>
