@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Copy, XCircle, Pencil } from "lucide-react";
+import { ArrowLeft, Copy, RotateCcw, XCircle, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -19,12 +19,25 @@ import { api, formatApiError } from "@/lib/api";
 import { brl, formatDateTime, STATUS_LABEL, STATUS_ORDER } from "@/lib/format";
 import { toast } from "sonner";
 
+// Mirrors backend ALLOWED_TRANSITIONS (backend/modules/orders/routes.py).
 const TRANSITIONS = {
   new: ["in_preparation", "cancelled"],
-  in_preparation: ["ready", "cancelled"],
-  ready: ["delivered", "cancelled"],
+  in_preparation: ["new", "ready", "cancelled"],
+  ready: ["in_preparation", "delivered", "cancelled"],
   delivered: [],
   cancelled: [],
+};
+
+// Single-step rollback within the active kitchen pipeline — delivered/cancelled stay terminal.
+const PREV_STATUS = {
+  in_preparation: "new",
+  ready: "in_preparation",
+};
+
+const NEXT_STATUS = {
+  new: "in_preparation",
+  in_preparation: "ready",
+  ready: "delivered",
 };
 
 export default function OrderDetailPage() {
@@ -135,24 +148,37 @@ export default function OrderDetailPage() {
         </div>
       </header>
 
-      {/* Status advance actions */}
-      {TRANSITIONS[order.status].filter((s) => s !== "cancelled").length > 0 && (
+      {/* Status advance/rollback actions */}
+      {(PREV_STATUS[order.status] || NEXT_STATUS[order.status]) && (
         <Card className="mb-6">
           <CardContent className="p-4 flex flex-wrap items-center gap-3">
-            <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Avançar para</div>
-            {TRANSITIONS[order.status]
-              .filter((s) => s !== "cancelled")
-              .map((s) => (
+            {PREV_STATUS[order.status] && (
+              <>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Voltar para</div>
                 <Button
-                  key={s}
+                  variant="outline"
                   size="sm"
-                  onClick={() => changeStatus(s)}
+                  onClick={() => changeStatus(PREV_STATUS[order.status])}
                   disabled={busy}
-                  data-testid={`advance-to-${s}`}
+                  data-testid={`revert-to-${PREV_STATUS[order.status]}`}
                 >
-                  {STATUS_LABEL[s]}
+                  <RotateCcw className="w-4 h-4 mr-1.5" /> {STATUS_LABEL[PREV_STATUS[order.status]]}
                 </Button>
-              ))}
+              </>
+            )}
+            {NEXT_STATUS[order.status] && (
+              <>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold sm:ml-2">Avançar para</div>
+                <Button
+                  size="sm"
+                  onClick={() => changeStatus(NEXT_STATUS[order.status])}
+                  disabled={busy}
+                  data-testid={`advance-to-${NEXT_STATUS[order.status]}`}
+                >
+                  {STATUS_LABEL[NEXT_STATUS[order.status]]}
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
       )}
