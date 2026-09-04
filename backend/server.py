@@ -53,10 +53,30 @@ api_router.include_router(compat_router)
 app.include_router(api_router)
 
 # CORS
+# CORS_ORIGINS (opcional): lista de origens separadas por vírgula, ex.
+#   CORS_ORIGINS=https://<seu-frontend>.onrender.com,https://<seu-dominio-proprio>
+# Defina isso na configuração do serviço de backend (ex.: env vars do Render)
+# apontando para a(s) URL(s) real(is) do frontend em produção. Sem essa
+# variável, só as origens de desenvolvimento local do CRA são permitidas.
+_cors_origins_env = os.environ.get("CORS_ORIGINS", "").strip()
+if _cors_origins_env:
+    CORS_ORIGINS = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+else:
+    CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+_cors_allow_credentials = True
+if "*" in CORS_ORIGINS:
+    # allow_origins=["*"] + allow_credentials=True é uma combinação inválida (o
+    # navegador recusa credenciais com origem coringa) e insegura (qualquer site
+    # pode chamar a API). Se CORS_ORIGINS=* for definido explicitamente, desativa
+    # credentials em vez de manter essa configuração.
+    logger.warning("CORS_ORIGINS='*' — desativando allow_credentials (combinação inválida com origem coringa).")
+    _cors_allow_credentials = False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_credentials=_cors_allow_credentials,
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
