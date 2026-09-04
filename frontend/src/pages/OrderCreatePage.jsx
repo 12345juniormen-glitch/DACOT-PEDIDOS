@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Minus, Trash2, Search } from "lucide-react";
+import { ArrowLeft, Plus, Minus, Trash2, Search, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,12 +9,16 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CustomerFormDialog } from "@/components/CustomerFormDialog";
 import { api, formatApiError } from "@/lib/api";
 import { brl } from "@/lib/format";
 import { toast } from "sonner";
+
+const CREATE_CUSTOMER = "__create_customer__";
 
 export default function OrderCreatePage() {
   const nav = useNavigate();
@@ -22,6 +26,7 @@ export default function OrderCreatePage() {
   const [customers, setCustomers] = useState([]);
   const [productSearch, setProductSearch] = useState("");
   const [customerId, setCustomerId] = useState("none");
+  const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [items, setItems] = useState([]); // { product_id, name, unit_price, quantity, notes }
   const [notes, setNotes] = useState("");
   const [discountType, setDiscountType] = useState("none");
@@ -166,7 +171,16 @@ export default function OrderCreatePage() {
         <aside className="space-y-4">
           <div className="bg-white border rounded-lg p-4">
             <Label>Cliente (opcional)</Label>
-            <Select value={customerId} onValueChange={setCustomerId}>
+            <Select
+              value={customerId}
+              onValueChange={(v) => {
+                if (v === CREATE_CUSTOMER) {
+                  setCustomerDialogOpen(true);
+                  return;
+                }
+                setCustomerId(v);
+              }}
+            >
               <SelectTrigger className="mt-1.5" data-testid="customer-select">
                 <SelectValue placeholder="Selecionar cliente" />
               </SelectTrigger>
@@ -177,9 +191,22 @@ export default function OrderCreatePage() {
                     {c.name} {c.phone ? `— ${c.phone}` : ""}
                   </SelectItem>
                 ))}
+                <SelectSeparator />
+                <SelectItem value={CREATE_CUSTOMER} className="text-primary font-medium">
+                  <span className="inline-flex items-center gap-1.5"><UserPlus className="w-3.5 h-3.5" /> Criar novo cliente</span>
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
+
+          <CustomerFormDialog
+            open={customerDialogOpen}
+            onOpenChange={setCustomerDialogOpen}
+            onSaved={(c) => {
+              setCustomers((prev) => [...prev, c]);
+              setCustomerId(c.id);
+            }}
+          />
 
           <div className="bg-white border rounded-lg p-4">
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Itens</div>
