@@ -4,6 +4,7 @@ import { Plus, RefreshCw, ChevronRight, Clock, ChefHat, ArrowRight, AlertTriangl
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { DashboardMetricDialog } from "@/components/DashboardMetricDialog";
 import { StatusBadge, STATUS_ICON } from "@/components/StatusBadge";
 import { api, formatApiError } from "@/lib/api";
 import { brl, formatTime, STATUS_LABEL, NEXT_STATUS } from "@/lib/format";
@@ -31,6 +32,7 @@ export default function DashboardPage() {
   const [orders, setOrders] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [metricDialog, setMetricDialog] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -221,39 +223,69 @@ export default function DashboardPage() {
         <section>
           <SectionTitle>Vendas & desempenho hoje</SectionTitle>
           <div className="bg-card border rounded-lg p-4 flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Faturamento hoje</div>
-              <div className="mt-1 font-display text-3xl font-bold text-foreground" data-testid="metric-revenue">
+            <button
+              type="button"
+              onClick={() => setMetricDialog("revenue")}
+              className="text-left rounded-md -m-1.5 p-1.5 hover:bg-muted/60 transition-colors"
+              data-testid="metric-revenue"
+            >
+              <div className="flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                Faturamento hoje <ChevronRight className="w-3 h-3 opacity-60" />
+              </div>
+              <div className="mt-1 font-display text-3xl font-bold text-foreground">
                 {stats ? brl(stats.today_revenue) : "—"}
               </div>
-            </div>
+            </button>
             <div className="text-right">
               <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Entregues (total)</div>
               <div className="mt-1 font-display text-2xl font-semibold text-foreground" data-testid="metric-delivered">
                 {stats ? stats.delivered : "—"}
               </div>
             </div>
-            <div className="text-right">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Pedidos hoje</div>
-              <div className="mt-1 font-display text-2xl font-semibold text-foreground" data-testid="metric-orders-today">
+            <button
+              type="button"
+              onClick={() => setMetricDialog("createdToday")}
+              className="text-right rounded-md -m-1.5 p-1.5 hover:bg-muted/60 transition-colors"
+              data-testid="metric-orders-today"
+            >
+              <div className="flex items-center justify-end gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                <ChevronRight className="w-3 h-3 opacity-60" /> Pedidos hoje
+              </div>
+              <div className="mt-1 font-display text-2xl font-semibold text-foreground">
                 {stats ? stats.orders_created_today : "—"}
               </div>
-            </div>
-            <div className="text-right">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Entregues hoje</div>
-              <div className="mt-1 font-display text-2xl font-semibold text-foreground" data-testid="metric-delivered-today">
+            </button>
+            <button
+              type="button"
+              onClick={() => setMetricDialog("deliveredToday")}
+              className="text-right rounded-md -m-1.5 p-1.5 hover:bg-muted/60 transition-colors"
+              data-testid="metric-delivered-today"
+            >
+              <div className="flex items-center justify-end gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                <ChevronRight className="w-3 h-3 opacity-60" /> Entregues hoje
+              </div>
+              <div className="mt-1 font-display text-2xl font-semibold text-foreground">
                 {stats ? stats.orders_delivered_today : "—"}
               </div>
-            </div>
-            <div className="text-right">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Tempo total médio hoje</div>
-              <div className="mt-1 font-display text-2xl font-semibold text-foreground" data-testid="metric-avg-total-time-today">
+            </button>
+            <button
+              type="button"
+              onClick={() => setMetricDialog("avgTime")}
+              className="text-right rounded-md -m-1.5 p-1.5 hover:bg-muted/60 transition-colors"
+              data-testid="metric-avg-total-time-today"
+            >
+              <div className="flex items-center justify-end gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                <ChevronRight className="w-3 h-3 opacity-60" /> Tempo total médio hoje
+              </div>
+              <div className="mt-1 font-display text-2xl font-semibold text-foreground">
                 {stats && stats.avg_order_total_minutes_today != null ? formatDurationMinutes(stats.avg_order_total_minutes_today * 60000) : "—"}
               </div>
-            </div>
+            </button>
           </div>
         </section>
       )}
+
+      <DashboardMetricDialog open={!!metricDialog} onOpenChange={(v) => !v && setMetricDialog(null)} kind={metricDialog} />
     </div>
   );
 }

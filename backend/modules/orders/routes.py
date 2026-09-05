@@ -26,6 +26,19 @@ DiscountType = Literal["none", "fixed", "percent"]
 # not UTC — otherwise the day rolls over 3h early (America/Sao_Paulo = UTC-3).
 RESTAURANT_TZ = ZoneInfo("America/Sao_Paulo")
 
+
+def _today_bounds_utc() -> tuple[str, str]:
+    """[start, end) of "today" in the restaurant's local timezone, as UTC ISO strings.
+
+    Single source of truth for "today" used by both /orders/stats and the today_only/
+    delivered_today_only filters below, so a stats card and its drill-down list (GET
+    /orders with the matching filter) always agree on the same set of orders.
+    """
+    start_local = datetime.now(RESTAURANT_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = start_local.astimezone(timezone.utc).isoformat()
+    end = (start_local + timedelta(days=1)).astimezone(timezone.utc).isoformat()
+    return start, end
+
 # status transitions allowed (source -> allowed targets)
 # Backward moves are allowed within the active kitchen pipeline (new <-> in_preparation <-> ready)
 # so an accidental advance can be undone. delivered/cancelled stay terminal — delivered feeds
@@ -230,6 +243,8 @@ async def list_orders(
     status_filter: Optional[str] = Query(None, alias="status"),
     active_only: bool = Query(False, description="Se true, oculta 'delivered' e 'cancelled'"),
     customer_id: Optional[str] = Query(None, description="Filtra pelo histórico de um cliente"),
+    today_only: bool = Query(False, description="Se true, filtra pedidos criados hoje (America/Sao_Paulo) — mesmo dia usado em /orders/stats"),
+    delivered_today_only: bool = Query(False, description="Se true, filtra pedidos entregues hoje (America/Sao_Paulo) — mesmo dia usado em /orders/stats"),
     search: str = Query("", max_length=120),
     limit: int = Query(200, ge=1, le=1000),
 ):
@@ -243,6 +258,13 @@ async def list_orders(
         q["status"] = {"$in": ["new", "in_preparation", "ready"]}
     if customer_id:
         q["customer_id"] = customer_id
+    if today_only or delivered_today_only:
+        today_start, today_end = _today_bounds_utc()
+        if delivered_today_only:
+            q["status"] = "delivered"
+            q["delivered_at"] = {"$gte": today_start, "$lt": today_end}
+        else:
+            q["created_at"] = {"$gte": today_start, "$lt": today_end}
     if search.strip():
         s = search.strip()
         # try order_number match
@@ -267,9 +289,7 @@ async def orders_stats(tenant: Tenant = Depends(require_roles("admin", "manager"
     async for row in db.orders.aggregate(pipeline):
         result[row["_id"]] = row["count"]
     # today's revenue (delivered only) — day boundary is local midnight, converted to UTC
-    today_start_local = datetime.now(RESTAURANT_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
-    today_start = today_start_local.astimezone(timezone.utc).isoformat()
-    today_end = (today_start_local + timedelta(days=1)).astimezone(timezone.utc).isoformat()
+    today_start, today_end = _today_bounds_utc()
     today_pipeline = [
         {"$match": {
             "restaurant_id": tenant.restaurant_id,

@@ -840,3 +840,91 @@ class TestOrdersStatsTodayIndicators:
         after = self._stats(admin_h)
         assert after["orders_created_today"] == before["orders_created_today"]
         assert after["orders_delivered_today"] == before["orders_delivered_today"]
+
+
+# ---------------- GET /orders today_only / delivered_today_only: drill-down filters ----------------
+class TestOrdersTodayFilters:
+    """Powers the Dashboard's "Vendas & desempenho hoje" drill-down dialogs. The list
+    returned by these filters must always agree with the matching /orders/stats count,
+    otherwise a modal's total would contradict the card that opened it."""
+
+    @pytest.fixture(scope="class")
+    def tenant_id(self):
+        return f"tenant-todayfilters-{uuid.uuid4().hex[:8]}"
+
+    @pytest.fixture(scope="class")
+    def admin_h(self, tenant_id):
+        r = exchange(sign_handoff(tenant_id, "admin"))
+        assert r.status_code == 200, r.text[:200]
+        return {"Authorization": f"Bearer {r.json()['token']}"}
+
+    @pytest.fixture(scope="class")
+    def product_id(self, admin_h):
+        p = requests.post(f"{API}/products", json={"name": "TEST_TodayFilters", "price": 30, "category": "TEST_C", "active": True},
+                          headers=admin_h, timeout=20)
+        assert p.status_code == 201, p.text[:200]
+        return p.json()["id"]
+
+    def _new_order(self, admin_h, product_id):
+        o = requests.post(f"{API}/orders", json={"items": [{"product_id": product_id, "quantity": 1}]}, headers=admin_h, timeout=20)
+        assert o.status_code == 201, o.text[:200]
+        return o.json()
+
+    def _stats(self, admin_h):
+        r = requests.get(f"{API}/orders/stats", headers=admin_h, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+        return r.json()
+
+    def test_today_only_matches_stats_created_today_count(self, admin_h, product_id):
+        self._new_order(admin_h, product_id)
+        self._new_order(admin_h, product_id)
+        stats = self._stats(admin_h)
+        r = requests.get(f"{API}/orders", params={"today_only": "true", "limit": 500}, headers=admin_h, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+        assert len(r.json()) == stats["orders_created_today"]
+
+    def test_today_only_includes_all_statuses_not_just_delivered(self, admin_h, product_id):
+        order = self._new_order(admin_h, product_id)
+        r = requests.get(f"{API}/orders", params={"today_only": "true", "limit": 500}, headers=admin_h, timeout=20)
+        ids = [o["id"] for o in r.json()]
+        assert order["id"] in ids, "pedido recem-criado (status 'new') deve aparecer em today_only"
+
+    def test_delivered_today_only_matches_stats_delivered_today_count(self, admin_h, product_id):
+        order = self._new_order(admin_h, product_id)
+        requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "in_preparation"}, headers=admin_h, timeout=20)
+        requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "ready"}, headers=admin_h, timeout=20)
+        requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "delivered"}, headers=admin_h, timeout=20)
+
+        stats = self._stats(admin_h)
+        r = requests.get(f"{API}/orders", params={"delivered_today_only": "true", "limit": 500}, headers=admin_h, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+        body = r.json()
+        assert len(body) == stats["orders_delivered_today"]
+        assert all(o["status"] == "delivered" for o in body)
+        assert order["id"] in [o["id"] for o in body]
+
+    def test_delivered_today_only_excludes_non_delivered(self, admin_h, product_id):
+        order = self._new_order(admin_h, product_id)  # fica em "new", nunca entregue
+        r = requests.get(f"{API}/orders", params={"delivered_today_only": "true", "limit": 500}, headers=admin_h, timeout=20)
+        ids = [o["id"] for o in r.json()]
+        assert order["id"] not in ids
+
+    def test_revenue_drilldown_query_sums_to_today_revenue(self, admin_h, product_id):
+        """A consulta que o modal de faturamento usa (status=delivered + today_only) deve
+        somar exatamente o mesmo valor de today_revenue do /orders/stats."""
+        order = self._new_order(admin_h, product_id)
+        requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "in_preparation"}, headers=admin_h, timeout=20)
+        requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "ready"}, headers=admin_h, timeout=20)
+        requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "delivered"}, headers=admin_h, timeout=20)
+
+        stats = self._stats(admin_h)
+        r = requests.get(f"{API}/orders", params={"status": "delivered", "today_only": "true", "limit": 500}, headers=admin_h, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+        total = sum(o["total"] for o in r.json())
+        assert abs(total - stats["today_revenue"]) < 0.01
+
+    def test_foreign_tenant_orders_never_appear_in_today_filters(self, admin_h, H_B, beta_data):
+        r1 = requests.get(f"{API}/orders", params={"today_only": "true", "limit": 500}, headers=admin_h, timeout=20)
+        assert all(o["id"] != beta_data["order"]["id"] for o in r1.json())
+        r2 = requests.get(f"{API}/orders", params={"delivered_today_only": "true", "limit": 500}, headers=admin_h, timeout=20)
+        assert all(o["id"] != beta_data["order"]["id"] for o in r2.json())
