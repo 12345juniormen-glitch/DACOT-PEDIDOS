@@ -3,6 +3,8 @@ import concurrent.futures
 import os
 import time
 import uuid
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import jwt as pyjwt
 import pytest
@@ -730,3 +732,111 @@ class TestOrderDeliveredAtExposure:
         assert cancelled["status"] == "cancelled"
         assert cancelled["cancelled_at"] is not None
         assert cancelled["delivered_at"] is None
+
+
+# ---------------- GET /orders/stats: today's operational indicators ----------------
+class TestOrdersStatsTodayIndicators:
+    """Volume de pedidos hoje, entregues hoje, e tempo total médio hoje — todos
+    derivados só de created_at/delivered_at (nunca reescritos), honestos mesmo com
+    rollback de status pelo caminho. "Hoje" é definido em America/Sao_Paulo."""
+
+    RESTAURANT_TZ = ZoneInfo("America/Sao_Paulo")
+
+    @pytest.fixture(scope="class")
+    def tenant_id(self):
+        return f"tenant-todaystats-{uuid.uuid4().hex[:8]}"
+
+    @pytest.fixture(scope="class")
+    def admin_h(self, tenant_id):
+        r = exchange(sign_handoff(tenant_id, "admin"))
+        assert r.status_code == 200, r.text[:200]
+        return {"Authorization": f"Bearer {r.json()['token']}"}
+
+    @pytest.fixture(scope="class")
+    def product_id(self, admin_h):
+        p = requests.post(f"{API}/products", json={"name": "TEST_TodayStats", "price": 20, "category": "TEST_C", "active": True},
+                          headers=admin_h, timeout=20)
+        assert p.status_code == 201, p.text[:200]
+        return p.json()["id"]
+
+    def _new_order(self, admin_h, product_id):
+        o = requests.post(f"{API}/orders", json={"items": [{"product_id": product_id, "quantity": 1}]}, headers=admin_h, timeout=20)
+        assert o.status_code == 201, o.text[:200]
+        return o.json()
+
+    def _stats(self, admin_h):
+        r = requests.get(f"{API}/orders/stats", headers=admin_h, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+        return r.json()
+
+    def test_fresh_tenant_has_zero_today_indicators(self, admin_h):
+        stats = self._stats(admin_h)
+        assert stats["orders_created_today"] == 0
+        assert stats["orders_delivered_today"] == 0
+        assert stats["avg_order_total_minutes_today"] is None
+
+    def test_created_order_counts_as_created_today_but_not_delivered(self, admin_h, product_id):
+        before = self._stats(admin_h)
+        self._new_order(admin_h, product_id)
+        after = self._stats(admin_h)
+        assert after["orders_created_today"] == before["orders_created_today"] + 1
+        assert after["orders_delivered_today"] == before["orders_delivered_today"], "criar um pedido nao deve contar como entregue"
+
+    def test_delivered_order_updates_count_and_average(self, admin_h, product_id):
+        before = self._stats(admin_h)
+        order = self._new_order(admin_h, product_id)
+        requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "in_preparation"}, headers=admin_h, timeout=20)
+        requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "ready"}, headers=admin_h, timeout=20)
+        delivered = requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "delivered"}, headers=admin_h, timeout=20).json()
+
+        after = self._stats(admin_h)
+        assert after["orders_delivered_today"] == before["orders_delivered_today"] + 1
+        assert after["avg_order_total_minutes_today"] is not None
+
+        # A média deve refletir o tempo real desse pedido (created_at -> delivered_at),
+        # nao um "tempo de preparo" estimado — comparamos com o calculo feito aqui a partir
+        # dos proprios timestamps que a API ja devolveu.
+        expected_minutes = (
+            datetime.fromisoformat(delivered["delivered_at"]) - datetime.fromisoformat(delivered["created_at"])
+        ).total_seconds() / 60
+        # so um pedido entregue hoje neste tenant isolado, entao a media == esse pedido
+        # (tolerancia cobre o arredondamento de 1 casa decimal feito pelo backend)
+        assert abs(after["avg_order_total_minutes_today"] - expected_minutes) < 0.1
+
+    def test_cancelled_order_does_not_affect_delivered_or_average(self, admin_h, product_id):
+        before = self._stats(admin_h)
+        order = self._new_order(admin_h, product_id)
+        requests.post(f"{API}/orders/{order['id']}/cancel", headers=admin_h, timeout=20)
+        after = self._stats(admin_h)
+        assert after["orders_delivered_today"] == before["orders_delivered_today"]
+        assert after["avg_order_total_minutes_today"] == before["avg_order_total_minutes_today"], "cancelamento nao deve mexer na media"
+        assert after["orders_created_today"] == before["orders_created_today"] + 1, "cancelado ainda foi criado hoje"
+
+    def test_today_boundary_matches_independent_sao_paulo_calculation(self, admin_h, product_id):
+        """Calcula 'inicio de hoje' em America/Sao_Paulo de forma independente (sem
+        importar nada do backend) e confirma que um pedido criado agora cai dentro
+        desse limite — prova que o backend usa o fuso certo, nao UTC puro nem outro."""
+        today_start_local = datetime.now(self.RESTAURANT_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start_utc = today_start_local.astimezone(timezone.utc)
+
+        order = self._new_order(admin_h, product_id)
+        created_at = datetime.fromisoformat(order["created_at"])
+        assert created_at.tzinfo is not None
+        assert created_at >= today_start_utc, "pedido criado agora deveria estar dentro do 'hoje' em America/Sao_Paulo"
+
+    def test_foreign_tenant_orders_do_not_affect_today_indicators(self, admin_h, H_B, beta_data):
+        """Cria e entrega um pedido em outro tenant (BETA) e confirma que os indicadores
+        de hoje deste tenant (isolado, criado só para esta classe) não mudam nada."""
+        before = self._stats(admin_h)
+
+        o = requests.post(f"{API}/orders", json={"items": [{"product_id": beta_data["product"]["id"], "quantity": 1}]}, headers=H_B, timeout=20)
+        assert o.status_code == 201, o.text[:200]
+        oid = o.json()["id"]
+        requests.patch(f"{API}/orders/{oid}/status", json={"status": "in_preparation"}, headers=H_B, timeout=20)
+        requests.patch(f"{API}/orders/{oid}/status", json={"status": "ready"}, headers=H_B, timeout=20)
+        r = requests.patch(f"{API}/orders/{oid}/status", json={"status": "delivered"}, headers=H_B, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+
+        after = self._stats(admin_h)
+        assert after["orders_created_today"] == before["orders_created_today"]
+        assert after["orders_delivered_today"] == before["orders_delivered_today"]

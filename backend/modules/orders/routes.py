@@ -7,7 +7,7 @@
 - Status transitions are validated to keep data consistent.
 """
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 from zoneinfo import ZoneInfo
 
@@ -267,12 +267,9 @@ async def orders_stats(tenant: Tenant = Depends(require_roles("admin", "manager"
     async for row in db.orders.aggregate(pipeline):
         result[row["_id"]] = row["count"]
     # today's revenue (delivered only) — day boundary is local midnight, converted to UTC
-    today_start = (
-        datetime.now(RESTAURANT_TZ)
-        .replace(hour=0, minute=0, second=0, microsecond=0)
-        .astimezone(timezone.utc)
-        .isoformat()
-    )
+    today_start_local = datetime.now(RESTAURANT_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = today_start_local.astimezone(timezone.utc).isoformat()
+    today_end = (today_start_local + timedelta(days=1)).astimezone(timezone.utc).isoformat()
     today_pipeline = [
         {"$match": {
             "restaurant_id": tenant.restaurant_id,
@@ -285,6 +282,38 @@ async def orders_stats(tenant: Tenant = Depends(require_roles("admin", "manager"
     async for row in db.orders.aggregate(today_pipeline):
         revenue_cents = row["total"]
     result["today_revenue"] = cents_to_reais(revenue_cents)
+
+    # Indicadores operacionais do dia (America/Sao_Paulo), pensados para a operação de UM
+    # restaurante — não são BI/comparação entre restaurantes (isso fica no DACOT Hub).
+    # created_at e delivered_at nunca são reescritos, então essas contagens/médias são
+    # honestas mesmo com rollback de status pelo caminho (ao contrário de um "tempo de
+    # preparo", que exigiria um timestamp de entrada em in_preparation que não existe).
+    result["orders_created_today"] = await db.orders.count_documents({
+        "restaurant_id": tenant.restaurant_id,
+        "created_at": {"$gte": today_start, "$lt": today_end},
+    })
+
+    delivered_today_docs = await db.orders.find(
+        {
+            "restaurant_id": tenant.restaurant_id,
+            "status": "delivered",
+            "delivered_at": {"$gte": today_start, "$lt": today_end},
+        },
+        {"_id": 0, "created_at": 1, "delivered_at": 1},
+    ).to_list(None)
+    result["orders_delivered_today"] = len(delivered_today_docs)
+
+    # Tempo TOTAL médio do pedido (criação -> entrega) entre os entregues hoje — não é
+    # "tempo de preparo": não sabemos quanto desse tempo foi em cada status intermediário.
+    avg_total_minutes_today = None
+    if delivered_today_docs:
+        total_ms = sum(
+            (datetime.fromisoformat(d["delivered_at"]) - datetime.fromisoformat(d["created_at"])).total_seconds() * 1000
+            for d in delivered_today_docs
+        )
+        avg_total_minutes_today = round(total_ms / len(delivered_today_docs) / 60000, 1)
+    result["avg_order_total_minutes_today"] = avg_total_minutes_today
+
     return result
 
 

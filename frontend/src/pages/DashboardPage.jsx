@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { StatusBadge, STATUS_ICON } from "@/components/StatusBadge";
 import { api, formatApiError } from "@/lib/api";
 import { brl, formatTime, STATUS_LABEL, NEXT_STATUS } from "@/lib/format";
+import { formatDurationMinutes } from "@/lib/orderTimeline";
 import { toast } from "sonner";
 
 import { useAuth } from "@/context/AuthContext";
@@ -212,10 +213,13 @@ export default function DashboardPage() {
         )}
       </section>
 
-      {/* Informações de vendas — só para quem enxerga faturamento */}
+      {/* Informações de vendas e desempenho operacional do dia — só para quem enxerga
+          faturamento. Indicadores de hoje vêm de GET /orders/stats (created_at/delivered_at,
+          nunca reescritos) — operacionais de UM restaurante, não BI/comparação (isso fica
+          no DACOT Hub). Não duplica o alerta de "20+ min em preparo" já existente acima. */}
       {canSeeFinance && (
         <section>
-          <SectionTitle>Vendas</SectionTitle>
+          <SectionTitle>Vendas & desempenho hoje</SectionTitle>
           <div className="bg-card border rounded-lg p-4 flex items-center justify-between flex-wrap gap-4">
             <div>
               <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Faturamento hoje</div>
@@ -224,9 +228,27 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="text-right">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Entregues</div>
+              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Entregues (total)</div>
               <div className="mt-1 font-display text-2xl font-semibold text-foreground" data-testid="metric-delivered">
                 {stats ? stats.delivered : "—"}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Pedidos hoje</div>
+              <div className="mt-1 font-display text-2xl font-semibold text-foreground" data-testid="metric-orders-today">
+                {stats ? stats.orders_created_today : "—"}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Entregues hoje</div>
+              <div className="mt-1 font-display text-2xl font-semibold text-foreground" data-testid="metric-delivered-today">
+                {stats ? stats.orders_delivered_today : "—"}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Tempo total médio hoje</div>
+              <div className="mt-1 font-display text-2xl font-semibold text-foreground" data-testid="metric-avg-total-time-today">
+                {stats && stats.avg_order_total_minutes_today != null ? formatDurationMinutes(stats.avg_order_total_minutes_today * 60000) : "—"}
               </div>
             </div>
           </div>
