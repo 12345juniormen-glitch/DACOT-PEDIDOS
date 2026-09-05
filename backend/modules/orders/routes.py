@@ -92,6 +92,7 @@ class OrderOut(BaseModel):
     created_at: str
     updated_at: str
     cancelled_at: Optional[str] = None
+    delivered_at: Optional[str] = None
 
 
 # ---------- Helpers ----------
@@ -162,6 +163,7 @@ def _to_out(doc: dict) -> OrderOut:
         created_at=doc["created_at"],
         updated_at=doc["updated_at"],
         cancelled_at=doc.get("cancelled_at"),
+        delivered_at=doc.get("delivered_at"),
     )
 
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Copy, RotateCcw, XCircle, Pencil } from "lucide-react";
+import { ArrowLeft, Copy, RotateCcw, XCircle, Pencil, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -14,9 +14,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusBadge, STATUS_ICON } from "@/components/StatusBadge";
 import { api, formatApiError } from "@/lib/api";
-import { brl, formatDateTime, STATUS_LABEL, STATUS_ORDER } from "@/lib/format";
+import { brl, formatDateTime, formatTime, STATUS_LABEL, STATUS_ORDER } from "@/lib/format";
+import { buildTimelineEvents, computeTotalDurationMs, computeUntilCurrentDurationMs, formatDurationMinutes } from "@/lib/orderTimeline";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 
@@ -93,6 +94,16 @@ export default function OrderDetailPage() {
 
   const editable = order.status === "new" || order.status === "in_preparation";
   const cancellable = TRANSITIONS[order.status].includes("cancelled");
+
+  const timelineEvents = buildTimelineEvents(order).map((ev) => ({
+    ...ev,
+    icon: ev.status ? STATUS_ICON[ev.status] : Circle,
+  }));
+  const totalDurationMs = computeTotalDurationMs(order);
+  const totalDuration = totalDurationMs != null ? formatDurationMinutes(totalDurationMs) : null;
+  const untilCurrentDurationMs = computeUntilCurrentDurationMs(order);
+  const untilCurrentDuration = untilCurrentDurationMs != null ? formatDurationMinutes(untilCurrentDurationMs) : null;
+  const currentStageLabel = timelineEvents[timelineEvents.length - 1]?.label;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
@@ -183,6 +194,43 @@ export default function OrderDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Linha do tempo — só eventos que os dados atuais permitem afirmar com certeza */}
+      <Card className="mb-6">
+        <CardContent className="p-4">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Linha do tempo</div>
+          <ol className="space-y-3" data-testid="order-timeline">
+            {timelineEvents.map((ev, idx) => {
+              const Icon = ev.icon;
+              return (
+                <li key={idx} className="flex items-center gap-3" data-testid={`timeline-event-${idx}`}>
+                  <span className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                    {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground" />}
+                  </span>
+                  <span className="flex-1 min-w-0 text-sm font-medium text-foreground">{ev.label}</span>
+                  <span className="text-sm text-muted-foreground shrink-0">{formatTime(ev.at)}</span>
+                </li>
+              );
+            })}
+          </ol>
+          {(totalDuration || untilCurrentDuration) && (
+            <div className="mt-4 pt-3 border-t flex flex-wrap gap-x-6 gap-y-1 text-sm">
+              {totalDuration && (
+                <div data-testid="timeline-total-duration">
+                  <span className="text-muted-foreground">Tempo total: </span>
+                  <span className="font-medium text-foreground">{totalDuration}</span>
+                </div>
+              )}
+              {untilCurrentDuration && (
+                <div data-testid="timeline-until-current-duration">
+                  <span className="text-muted-foreground">Tempo até {currentStageLabel}: </span>
+                  <span className="font-medium text-foreground">{untilCurrentDuration}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Items */}
       <div className="bg-card border rounded-lg overflow-hidden">

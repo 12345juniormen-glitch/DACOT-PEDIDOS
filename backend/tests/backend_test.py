@@ -672,3 +672,61 @@ class TestProductsSearch:
         r = requests.get(f"{API}/products", params={"search": "TEST_Segredo B"}, headers=admin_h, timeout=20)
         assert r.status_code == 200, r.text[:200]
         assert all(p["id"] != beta_data["product"]["id"] for p in r.json()), "produto de outro tenant nao pode aparecer na busca"
+
+
+# ---------------- Order timeline: delivered_at exposure ----------------
+class TestOrderDeliveredAtExposure:
+    """delivered_at already existed in the DB (written by change_status) but was never
+    returned by the API — the order timeline needs it to show the delivery event."""
+
+    @pytest.fixture(scope="class")
+    def tenant_id(self):
+        return f"tenant-timeline-{uuid.uuid4().hex[:8]}"
+
+    @pytest.fixture(scope="class")
+    def admin_h(self, tenant_id):
+        r = exchange(sign_handoff(tenant_id, "admin"))
+        assert r.status_code == 200, r.text[:200]
+        return {"Authorization": f"Bearer {r.json()['token']}"}
+
+    @pytest.fixture(scope="class")
+    def product_id(self, admin_h):
+        p = requests.post(f"{API}/products", json={"name": "TEST_Timeline", "price": 11, "category": "TEST_C", "active": True},
+                          headers=admin_h, timeout=20)
+        assert p.status_code == 201, p.text[:200]
+        return p.json()["id"]
+
+    def _new_order(self, admin_h, product_id):
+        o = requests.post(f"{API}/orders", json={"items": [{"product_id": product_id, "quantity": 1}]}, headers=admin_h, timeout=20)
+        assert o.status_code == 201, o.text[:200]
+        return o.json()
+
+    def test_fresh_order_has_no_delivered_at(self, admin_h, product_id):
+        """Compatibility check: an order never delivered (same response shape as an old
+        record predating this field) must return delivered_at as null, never error."""
+        order = self._new_order(admin_h, product_id)
+        assert order["delivered_at"] is None
+
+    def test_delivered_order_returns_delivered_at_and_keeps_created_at(self, admin_h, product_id):
+        order = self._new_order(admin_h, product_id)
+        requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "in_preparation"}, headers=admin_h, timeout=20)
+        requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "ready"}, headers=admin_h, timeout=20)
+        r = requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "delivered"}, headers=admin_h, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+        delivered = r.json()
+        assert delivered["status"] == "delivered"
+        assert delivered["delivered_at"] is not None
+        assert delivered["created_at"] == order["created_at"], "created_at nunca deve mudar"
+
+        fetched = requests.get(f"{API}/orders/{order['id']}", headers=admin_h, timeout=20)
+        assert fetched.status_code == 200, fetched.text[:200]
+        assert fetched.json()["delivered_at"] == delivered["delivered_at"], "GET deve devolver o mesmo delivered_at de forma consistente"
+
+    def test_cancelled_order_keeps_cancelled_at_and_null_delivered_at(self, admin_h, product_id):
+        order = self._new_order(admin_h, product_id)
+        r = requests.post(f"{API}/orders/{order['id']}/cancel", headers=admin_h, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+        cancelled = r.json()
+        assert cancelled["status"] == "cancelled"
+        assert cancelled["cancelled_at"] is not None
+        assert cancelled["delivered_at"] is None
