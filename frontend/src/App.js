@@ -3,6 +3,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { AppShell } from "@/components/layout/AppShell";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
 import OrderCreatePage from "@/pages/OrderCreatePage";
@@ -51,7 +52,7 @@ function App() {
           <Route path="/" element={<Shell><DashboardPage /></Shell>} />
           <Route path="/:restaurantSlug" element={<Shell><DashboardPage /></Shell>} />
           <Route path="/pedidos/novo" element={<Shell roles={["admin","manager","waiter"]}><OrderCreatePage /></Shell>} />
-          <Route path="/pedidos/:id" element={<Shell><OrderDetailPage /></Shell>} />
+          <Route path="/pedidos/:id" element={<Shell><ErrorBoundary><OrderDetailPage /></ErrorBoundary></Shell>} />
           <Route path="/pedidos/:id/editar" element={<Shell roles={["admin","manager","waiter"]}><OrderEditPage /></Shell>} />
           <Route path="/historico" element={<Shell><OrdersHistoryPage /></Shell>} />
           <Route path="/produtos" element={<Shell roles={["admin","manager"]}><ProductsPage /></Shell>} />

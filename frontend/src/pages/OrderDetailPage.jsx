@@ -17,6 +17,7 @@ import {
 import { StatusBadge } from "@/components/StatusBadge";
 import { api, formatApiError } from "@/lib/api";
 import { brl, formatDateTime, STATUS_LABEL, STATUS_ORDER } from "@/lib/format";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 
 // Mirrors backend ALLOWED_TRANSITIONS (backend/modules/orders/routes.py).
