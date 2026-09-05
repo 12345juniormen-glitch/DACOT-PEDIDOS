@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Plus, Pencil, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CustomerFormDialog } from "@/components/CustomerFormDialog";
@@ -15,6 +16,7 @@ export default function CustomersPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const load = async () => {
     try {
@@ -25,6 +27,21 @@ export default function CustomersPage() {
     }
   };
   useEffect(() => { load(); }, []);
+
+  // Deep link vindo da busca global (?customer=<id>): abre o histórico direto,
+  // sem precisar clicar o cliente na tabela. Reage tanto à lista carregar quanto
+  // à própria query mudar — assim funciona também quando o usuário já está em
+  // /clientes e busca outro cliente (a página não remonta nesse caso).
+  useEffect(() => {
+    if (items.length === 0) return;
+    const customerId = searchParams.get("customer");
+    if (!customerId) return;
+    const c = items.find((x) => x.id === customerId);
+    if (c) setViewing(c);
+    const next = new URLSearchParams(searchParams);
+    next.delete("customer");
+    setSearchParams(next, { replace: true });
+  }, [items, searchParams, setSearchParams]);
 
   const openCreate = () => { setEditing(null); setOpen(true); };
   const openEdit = (c) => { setEditing(c); setOpen(true); };

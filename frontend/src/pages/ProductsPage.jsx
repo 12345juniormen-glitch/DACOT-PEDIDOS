@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Plus, Pencil, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(empty);
   const [saving, setSaving] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const load = async () => {
     try {
@@ -43,6 +45,22 @@ export default function ProductsPage() {
   useEffect(() => {
     load();
   }, []);
+
+  // Deep link vindo da busca global (?product=<id>): já abre a edição. Reage
+  // tanto à lista carregar quanto à própria query mudar — assim funciona também
+  // quando o usuário já está em /produtos e busca outro produto (a página não
+  // remonta nesse caso).
+  useEffect(() => {
+    if (products.length === 0) return;
+    const productId = searchParams.get("product");
+    if (!productId) return;
+    const p = products.find((x) => x.id === productId);
+    if (p) openEdit(p);
+    const next = new URLSearchParams(searchParams);
+    next.delete("product");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- openEdit é recriada a cada render; não precisa disparar o efeito de novo
+  }, [products, searchParams, setSearchParams]);
 
   const openCreate = () => {
     setEditing(null);

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { LayoutDashboard, ClipboardList, History, Package, Users, LogOut, UtensilsCrossed, ShieldCheck, UserCircle, ChefHat, Menu } from "lucide-react";
+import { LayoutDashboard, ClipboardList, History, Package, Users, LogOut, UtensilsCrossed, ShieldCheck, UserCircle, ChefHat, Menu, Search } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { GlobalSearchDialog } from "@/components/GlobalSearchDialog";
 
 const ROLE_LABEL = { admin: "Administrador", manager: "Gerente", waiter: "Atendimento", kitchen: "Cozinha" };
 
@@ -22,6 +23,7 @@ export function AppShell({ children }) {
   const nav = useNavigate();
   const items = NAV_ALL.filter((n) => n.roles.includes(user?.role));
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const onLogout = async () => { await logout(); nav("/login", { replace: true }); };
 
@@ -31,6 +33,16 @@ export function AppShell({ children }) {
         <div className="h-16 flex items-center gap-2 px-6 border-b">
           <div className="w-9 h-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center"><UtensilsCrossed className="w-5 h-5" /></div>
           <div><div className="font-display font-extrabold text-lg leading-none tracking-tight">DACOT</div><div className="text-[11px] text-muted-foreground mt-0.5">Módulo de Pedidos</div></div>
+        </div>
+        <div className="px-3 pt-3">
+          <button
+            onClick={() => setSearchOpen(true)}
+            data-testid="global-search-trigger"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/50 text-sm text-muted-foreground hover:bg-muted transition-colors"
+          >
+            <Search className="w-4 h-4 shrink-0" />
+            <span className="truncate">Buscar pedidos, clientes ou produtos...</span>
+          </button>
         </div>
         <nav className="flex-1 p-3 space-y-1">
           {items.map(({ to, label, icon: Icon, testid, end }) => (
@@ -64,6 +76,14 @@ export function AppShell({ children }) {
         </button>
         <UtensilsCrossed className="w-5 h-5 text-primary" /><span className="font-display font-bold">DACOT</span>
         <div className="ml-auto flex items-center gap-1">
+          <button
+            onClick={() => setSearchOpen(true)}
+            data-testid="mobile-global-search-trigger"
+            aria-label="Buscar"
+            className="p-1.5 rounded-md text-muted-foreground hover:bg-muted"
+          >
+            <Search className="w-5 h-5" />
+          </button>
           <ThemeToggle />
           <button onClick={onLogout} data-testid="logout-button-mobile" className="text-xs text-muted-foreground px-1">Sair</button>
         </div>
@@ -95,6 +115,8 @@ export function AppShell({ children }) {
       </Sheet>
 
       <main className="flex-1 min-w-0 pt-14 md:pt-0">{children}</main>
+
+      <GlobalSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
     </div>
   );
 }

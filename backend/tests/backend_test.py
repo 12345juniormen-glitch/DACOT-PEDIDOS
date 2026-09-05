@@ -629,3 +629,46 @@ class TestOrdersFilteredByCustomer:
         r = requests.get(f"{API}/orders", params={"customer_id": beta_data["customer"]["id"]}, headers=admin_h, timeout=20)
         assert r.status_code == 200, r.text[:200]
         assert r.json() == [], "customer_id de outro tenant nao pode retornar pedidos de outro tenant"
+
+
+# ---------------- Global search: GET /products?search= ----------------
+class TestProductsSearch:
+    """Powers the products group of the global search. Must match by name,
+    case-insensitively, scoped to the caller's own tenant."""
+
+    @pytest.fixture(scope="class")
+    def tenant_id(self):
+        return f"tenant-prodsearch-{uuid.uuid4().hex[:8]}"
+
+    @pytest.fixture(scope="class")
+    def admin_h(self, tenant_id):
+        r = exchange(sign_handoff(tenant_id, "admin"))
+        assert r.status_code == 200, r.text[:200]
+        return {"Authorization": f"Bearer {r.json()['token']}"}
+
+    @pytest.fixture(scope="class")
+    def seeded_products(self, admin_h):
+        burger = requests.post(f"{API}/products", json={"name": "TEST_X-Burger", "price": 25, "category": "TEST_C", "active": True}, headers=admin_h, timeout=20)
+        fries = requests.post(f"{API}/products", json={"name": "TEST_Batata Frita", "price": 12, "category": "TEST_C", "active": True}, headers=admin_h, timeout=20)
+        assert burger.status_code == 201, burger.text[:200]
+        assert fries.status_code == 201, fries.text[:200]
+        return burger.json(), fries.json()
+
+    def test_search_matches_by_name_case_insensitive(self, admin_h, seeded_products):
+        burger, fries = seeded_products
+        r = requests.get(f"{API}/products", params={"search": "x-burger"}, headers=admin_h, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+        ids = [p["id"] for p in r.json()]
+        assert burger["id"] in ids
+        assert fries["id"] not in ids
+
+    def test_search_with_no_match_returns_empty_list(self, admin_h, seeded_products):
+        r = requests.get(f"{API}/products", params={"search": "TEST_NaoExiste_xyz"}, headers=admin_h, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+        assert r.json() == []
+
+    def test_foreign_tenant_product_never_appears(self, admin_h, beta_data):
+        """A product name that only exists in another tenant must never surface here."""
+        r = requests.get(f"{API}/products", params={"search": "TEST_Segredo B"}, headers=admin_h, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+        assert all(p["id"] != beta_data["product"]["id"] for p in r.json()), "produto de outro tenant nao pode aparecer na busca"

@@ -51,6 +51,7 @@ async def list_products(
     tenant: Tenant = Depends(get_tenant),
     active_only: bool = Query(False, description="Se true, retorna apenas produtos ativos"),
     category: Optional[str] = None,
+    search: str = Query("", max_length=120),
 ):
     db = get_db()
     q: dict = {"restaurant_id": tenant.restaurant_id}
@@ -58,6 +59,8 @@ async def list_products(
         q["active"] = True
     if category:
         q["category"] = category
+    if search.strip():
+        q["name"] = {"$regex": search.strip(), "$options": "i"}
     docs = await db.products.find(q, {"_id": 0}).sort("name", 1).to_list(1000)
     return [_to_out(d) for d in docs]
 
