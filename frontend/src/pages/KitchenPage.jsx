@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, ChefHat, Play, Check, Clock, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api, formatApiError } from "@/lib/api";
+import { shouldBeepForNewOrders } from "@/lib/kitchenAlerts";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 
@@ -38,6 +39,31 @@ export default function KitchenPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null); // order id currently being updated
   const [now, setNow] = useState(() => Date.now());
+  // null = ainda não lemos nenhum poll (primeiro load não deve soar alerta).
+  const prevNewCountRef = useRef(null);
+  const audioCtxRef = useRef(null);
+
+  // Beep curto via Web Audio API — sem asset, sem dependência, sem loop. Só toca se o
+  // AudioContext já estiver "running" (desbloqueado por uma interação real do usuário);
+  // do contrário fica em silêncio, sem tentar contornar a política de autoplay do navegador.
+  const playBeep = () => {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || ctx.state !== "running") return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.2);
+    } catch {
+      // o som é só um extra — nunca deve derrubar a tela da cozinha.
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -48,8 +74,16 @@ export default function KitchenPage() {
         api.get("/orders", { params: { status: "in_preparation" } }),
         api.get("/orders", { params: { status: "ready" } }),
       ]);
+      const newCount = nw.data.length;
+      if (shouldBeepForNewOrders(prevNewCountRef.current, newCount)) {
+        playBeep();
+        toast("🔔 Novo pedido chegou na cozinha!");
+      }
+      prevNewCountRef.current = newCount;
       setOrders([...nw.data, ...ip.data, ...rd.data]);
     } catch (e) {
+      // Falha no poll: não atualiza prevNewCountRef, para o próximo poll bem-sucedido
+      // comparar contra a última contagem confiável (evita falso positivo/negativo).
       toast.error(formatApiError(e));
     } finally {
       setLoading(false);
@@ -61,6 +95,27 @@ export default function KitchenPage() {
     // Auto-refresh a cada 15s — sem WebSocket, seguro e simples.
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deve rodar só na montagem; load muda a cada render
+  }, []);
+
+  useEffect(() => {
+    // Desbloqueia o AudioContext numa interação real do usuário (política de autoplay dos
+    // navegadores) — nunca tenta tocar antes disso. Um único listener, removido após o
+    // primeiro uso ou ao desmontar, o que vier primeiro.
+    const unlockAudio = () => {
+      if (!audioCtxRef.current) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        audioCtxRef.current = new AudioContextClass();
+      }
+      audioCtxRef.current.resume?.().catch(() => {});
+    };
+    window.addEventListener("pointerdown", unlockAudio, { once: true });
+    window.addEventListener("keydown", unlockAudio, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    };
   }, []);
 
   useEffect(() => {
