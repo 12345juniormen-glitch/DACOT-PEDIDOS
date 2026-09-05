@@ -383,6 +383,7 @@ class TestOrderNumberConcurrency:
         order_numbers = sorted(resp.json()["order_number"] for resp in responses)
         assert len(set(order_numbers)) == n, f"order_number duplicado sob concorrência: {order_numbers}"
         # tenant novo e exclusivo para este teste: a sequência deve começar em 1001 e ser contígua
+        assert order_numbers == list(range(1001, 1001 + n)), f"sequência quebrada: {order_numbers}"
 
 
 # ---------------- Kitchen role: status rollback ----------------
@@ -482,4 +483,81 @@ class TestKitchenStatusRollback:
 
         oid2 = self._new_order(admin_h, product_id)
         assert self._set_status(waiter_h, oid2, "cancelled").status_code == 200
-        assert order_numbers == list(range(1001, 1001 + n)), f"sequência quebrada: {order_numbers}"
+
+
+# ---------------- KDS elapsed-time indicator: updated_at must track status entry ----------------
+class TestOrderStatusTimestampForElapsedIndicator:
+    """The KDS elapsed-time indicator times `in_preparation`/`ready` off `updated_at`.
+    That's only correct if `updated_at` is touched exclusively by real status
+    transitions (PATCH .../status) and never by a content edit (PUT /orders/{id})."""
+
+    @pytest.fixture(scope="class")
+    def tenant_id(self):
+        return f"tenant-timer-{uuid.uuid4().hex[:8]}"
+
+    @pytest.fixture(scope="class")
+    def admin_h(self, tenant_id):
+        r = exchange(sign_handoff(tenant_id, "admin"))
+        assert r.status_code == 200, r.text[:200]
+        return {"Authorization": f"Bearer {r.json()['token']}"}
+
+    @pytest.fixture(scope="class")
+    def product_id(self, admin_h):
+        p = requests.post(f"{API}/products", json={"name": "TEST_Timer", "price": 7, "category": "TEST_C", "active": True},
+                          headers=admin_h, timeout=20)
+        assert p.status_code == 201, p.text[:200]
+        return p.json()["id"]
+
+    def _new_order(self, admin_h, product_id):
+        o = requests.post(f"{API}/orders", json={"items": [{"product_id": product_id, "quantity": 1}]}, headers=admin_h, timeout=20)
+        assert o.status_code == 201, o.text[:200]
+        return o.json()
+
+    def test_new_order_updated_at_equals_created_at(self, admin_h, product_id):
+        order = self._new_order(admin_h, product_id)
+        assert order["updated_at"] == order["created_at"]
+
+    def test_status_transition_advances_updated_at(self, admin_h, product_id):
+        order = self._new_order(admin_h, product_id)
+        r = requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "in_preparation"}, headers=admin_h, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+        updated = r.json()
+        assert updated["updated_at"] != order["updated_at"]
+        assert updated["created_at"] == order["created_at"], "created_at nunca deve mudar"
+
+    def test_editing_order_in_preparation_does_not_touch_updated_at(self, admin_h, product_id):
+        """Regression for the KDS timer bug: editing an order's items while it's
+        in_preparation must NOT reset the "time in this stage" indicator."""
+        order = self._new_order(admin_h, product_id)
+        r1 = requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "in_preparation"}, headers=admin_h, timeout=20)
+        assert r1.status_code == 200, r1.text[:200]
+        in_prep_updated_at = r1.json()["updated_at"]
+
+        edit = requests.put(f"{API}/orders/{order['id']}", json={
+            "items": [{"product_id": product_id, "quantity": 2}],
+            "notes": "cliente pediu para trocar a quantidade",
+        }, headers=admin_h, timeout=20)
+        assert edit.status_code == 200, edit.text[:200]
+        assert edit.json()["updated_at"] == in_prep_updated_at, "editar o pedido nao deve mexer em updated_at (zeraria o cronometro da cozinha)"
+        assert edit.json()["items"][0]["quantity"] == 2, "a edicao em si deve ter sido aplicada normalmente"
+
+    def test_editing_order_still_new_does_not_touch_updated_at(self, admin_h, product_id):
+        order = self._new_order(admin_h, product_id)
+        edit = requests.put(f"{API}/orders/{order['id']}", json={
+            "items": [{"product_id": product_id, "quantity": 3}],
+            "notes": "",
+        }, headers=admin_h, timeout=20)
+        assert edit.status_code == 200, edit.text[:200]
+        assert edit.json()["updated_at"] == order["updated_at"]
+        assert edit.json()["updated_at"] == edit.json()["created_at"]
+
+    def test_ready_reached_updates_timestamp_and_rollback_resets_it_again(self, admin_h, product_id):
+        order = self._new_order(admin_h, product_id)
+        requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "in_preparation"}, headers=admin_h, timeout=20)
+        r_ready = requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "ready"}, headers=admin_h, timeout=20)
+        assert r_ready.status_code == 200
+        ready_at = r_ready.json()["updated_at"]
+
+        r_back = requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "in_preparation"}, headers=admin_h, timeout=20)
+        assert r_back.status_code == 200
+        assert r_back.json()["updated_at"] != ready_at, "voltar para Em preparo deve reiniciar o cronometro dessa etapa"

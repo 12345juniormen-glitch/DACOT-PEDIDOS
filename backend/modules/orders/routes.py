@@ -343,7 +343,10 @@ async def update_order(order_id: str, payload: OrderUpdateInput, tenant: Tenant 
         "discount_value": payload.discount_value if payload.discount_type != "none" else 0,
         "discount_cents": discount_c,
         "total_cents": total_c,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        # updated_at is intentionally NOT touched here: it marks "entered current status
+        # at" (set only by change_status below) and the KDS elapsed-time indicator relies
+        # on that to time how long an order has been in_preparation/ready. Editing an
+        # order's content is not a status change.
     }
     updated = await db.orders.find_one_and_update(
         {"id": order_id, "restaurant_id": tenant.restaurant_id},

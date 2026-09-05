@@ -2,18 +2,42 @@ import { useEffect, useMemo, useState } from "react";
 import { RefreshCw, ChefHat, Play, Check, Clock, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api, formatApiError } from "@/lib/api";
-import { formatTime } from "@/lib/format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 
 // KDS — visão exclusiva para cozinha.
 // Mostra pedidos em `new`, `in_preparation` e `ready`.
 // Ao marcar Entregue (feito por outra role), o pedido sai da lista na próxima atualização.
+
+// Timestamp que marca a entrada no status atual. Para "new" é sempre created_at (regra do
+// indicador de tempo: contar desde a criação, mesmo após um rollback). Para os demais,
+// updated_at só é tocado por uma transição de status real (backend/modules/orders/routes.py),
+// nunca por uma edição de conteúdo do pedido — por isso é seguro usá-lo aqui.
+const STAGE_TIMESTAMP_FIELD = { new: "created_at", in_preparation: "updated_at", ready: "updated_at" };
+
+function formatElapsedClock(elapsedMs) {
+  const totalSec = Math.max(0, Math.floor(elapsedMs / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+// 0–9min: normal · 10–19min: destaque leve · 20+min: destaque de atenção.
+function elapsedTierClass(elapsedMs) {
+  const totalMin = Math.floor(elapsedMs / 60000);
+  if (totalMin >= 20) return "text-rose-600 dark:text-rose-400 font-bold";
+  if (totalMin >= 10) return "text-amber-600 dark:text-amber-400 font-semibold";
+  return "text-muted-foreground font-medium";
+}
+
 export default function KitchenPage() {
   useDocumentTitle("Cozinha");
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null); // order id currently being updated
+  const [now, setNow] = useState(() => Date.now());
 
   const load = async () => {
     setLoading(true);
@@ -39,6 +63,13 @@ export default function KitchenPage() {
     return () => clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    // Relógio local só para o indicador de tempo dos cards — não bate no backend,
+    // roda em 1 único intervalo (não um por card) e é limpo ao desmontar.
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
   const grouped = useMemo(() => {
     const g = { new: [], in_preparation: [], ready: [] };
     // ordena mais antigos primeiro (FIFO para cozinha)
@@ -61,11 +92,6 @@ export default function KitchenPage() {
     } finally {
       setBusy(null);
     }
-  };
-
-  const elapsedMin = (iso) => {
-    const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-    return diff < 1 ? "agora" : `${diff} min`;
   };
 
   return (
@@ -101,7 +127,7 @@ export default function KitchenPage() {
               <div className="text-center text-base text-muted-foreground py-16">Nenhum pedido novo</div>
             )}
             {grouped.new.map((o) => (
-              <KitchenCard key={o.id} order={o} elapsed={elapsedMin(o.created_at)}>
+              <KitchenCard key={o.id} order={o} now={now}>
                 <Button
                   size="lg"
                   className="w-full text-base h-12"
@@ -129,7 +155,7 @@ export default function KitchenPage() {
               <div className="text-center text-base text-muted-foreground py-16">Nenhum pedido em preparo</div>
             )}
             {grouped.in_preparation.map((o) => (
-              <KitchenCard key={o.id} order={o} elapsed={elapsedMin(o.created_at)} accent="orange">
+              <KitchenCard key={o.id} order={o} now={now} accent="orange">
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
@@ -169,7 +195,7 @@ export default function KitchenPage() {
               <div className="text-center text-base text-muted-foreground py-16">Nenhum pedido pronto</div>
             )}
             {grouped.ready.map((o) => (
-              <KitchenCard key={o.id} order={o} elapsed={elapsedMin(o.created_at)} accent="emerald">
+              <KitchenCard key={o.id} order={o} now={now} accent="emerald">
                 <Button
                   variant="outline"
                   size="lg"
@@ -189,12 +215,14 @@ export default function KitchenPage() {
   );
 }
 
-function KitchenCard({ order, elapsed, accent = "blue", children }) {
+function KitchenCard({ order, now, accent = "blue", children }) {
   const accentBorder = accent === "orange"
     ? "border-orange-200 dark:border-orange-900"
     : accent === "emerald"
       ? "border-emerald-200 dark:border-emerald-900"
       : "border-slate-200 dark:border-slate-700";
+  const stageTimestamp = order[STAGE_TIMESTAMP_FIELD[order.status]] || order.created_at;
+  const elapsedMs = now - new Date(stageTimestamp).getTime();
   return (
     <article
       data-testid={`kitchen-order-${order.order_number}`}
@@ -202,8 +230,9 @@ function KitchenCard({ order, elapsed, accent = "blue", children }) {
     >
       <header className="px-4 py-3 flex items-center justify-between bg-muted border-b">
         <div className="font-display font-bold text-2xl text-foreground">#{order.order_number}</div>
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Clock className="w-4 h-4" /> {formatTime(order.created_at)} · <span className="font-medium">{elapsed}</span>
+        <div className="flex items-center gap-1.5 text-sm" data-testid={`elapsed-${order.order_number}`}>
+          <Clock className="w-4 h-4 text-muted-foreground" />
+          <span className={`font-display tabular-nums ${elapsedTierClass(elapsedMs)}`}>{formatElapsedClock(elapsedMs)}</span>
         </div>
       </header>
       <div className="p-4 space-y-2">
