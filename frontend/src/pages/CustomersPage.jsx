@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus, Pencil, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CustomerFormDialog } from "@/components/CustomerFormDialog";
+import { CustomerDetailDialog } from "@/components/CustomerDetailDialog";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { api, formatApiError } from "@/lib/api";
@@ -13,6 +14,7 @@ export default function CustomersPage() {
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [viewing, setViewing] = useState(null);
 
   const load = async () => {
     try {
@@ -63,7 +65,15 @@ export default function CustomersPage() {
             )}
             {items.map((c) => (
               <tr key={c.id} className="border-t" data-testid={`customer-row-${c.id}`}>
-                <td className="px-4 py-3 font-medium">{c.name}</td>
+                <td className="px-4 py-3 font-medium">
+                  <button
+                    onClick={() => setViewing(c)}
+                    data-testid={`view-customer-${c.id}`}
+                    className="text-left hover:text-primary hover:underline"
+                  >
+                    {c.name}
+                  </button>
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">{c.phone || "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground line-clamp-1">{c.notes || "—"}</td>
                 <td className="px-4 py-3">
@@ -79,6 +89,7 @@ export default function CustomersPage() {
       </div>
 
       <CustomerFormDialog open={open} onOpenChange={setOpen} editing={editing} onSaved={load} />
+      <CustomerDetailDialog open={!!viewing} onOpenChange={(v) => !v && setViewing(null)} customer={viewing} />
     </div>
   );
 }

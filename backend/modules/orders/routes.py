@@ -227,15 +227,20 @@ async def list_orders(
     tenant: Tenant = Depends(get_tenant),
     status_filter: Optional[str] = Query(None, alias="status"),
     active_only: bool = Query(False, description="Se true, oculta 'delivered' e 'cancelled'"),
+    customer_id: Optional[str] = Query(None, description="Filtra pelo histórico de um cliente"),
     search: str = Query("", max_length=120),
     limit: int = Query(200, ge=1, le=1000),
 ):
     db = get_db()
+    # restaurant_id vem sempre do tenant autenticado (JWT), nunca de entrada do cliente —
+    # um customer_id de outro tenant simplesmente não bate com nenhum pedido aqui.
     q: dict = {"restaurant_id": tenant.restaurant_id}
     if status_filter:
         q["status"] = status_filter
     elif active_only:
         q["status"] = {"$in": ["new", "in_preparation", "ready"]}
+    if customer_id:
+        q["customer_id"] = customer_id
     if search.strip():
         s = search.strip()
         # try order_number match

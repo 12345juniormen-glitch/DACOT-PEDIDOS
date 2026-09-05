@@ -561,3 +561,71 @@ class TestOrderStatusTimestampForElapsedIndicator:
         r_back = requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "in_preparation"}, headers=admin_h, timeout=20)
         assert r_back.status_code == 200
         assert r_back.json()["updated_at"] != ready_at, "voltar para Em preparo deve reiniciar o cronometro dessa etapa"
+
+
+# ---------------- Customer order history (GET /orders?customer_id=) ----------------
+class TestOrdersFilteredByCustomer:
+    """Powers the customer detail dialog's order history. Must return only that
+    customer's orders, scoped to the caller's own tenant — never another tenant's
+    data, regardless of which customer_id is requested."""
+
+    @pytest.fixture(scope="class")
+    def tenant_id(self):
+        return f"tenant-custhist-{uuid.uuid4().hex[:8]}"
+
+    @pytest.fixture(scope="class")
+    def admin_h(self, tenant_id):
+        r = exchange(sign_handoff(tenant_id, "admin"))
+        assert r.status_code == 200, r.text[:200]
+        return {"Authorization": f"Bearer {r.json()['token']}"}
+
+    @pytest.fixture(scope="class")
+    def product_id(self, admin_h):
+        p = requests.post(f"{API}/products", json={"name": "TEST_CustHist", "price": 15, "category": "TEST_C", "active": True},
+                          headers=admin_h, timeout=20)
+        assert p.status_code == 201, p.text[:200]
+        return p.json()["id"]
+
+    @pytest.fixture(scope="class")
+    def two_customers(self, admin_h):
+        c1 = requests.post(f"{API}/customers", json={"name": "TEST_Cliente1", "phone": "111", "notes": ""}, headers=admin_h, timeout=20)
+        c2 = requests.post(f"{API}/customers", json={"name": "TEST_Cliente2", "phone": "222", "notes": ""}, headers=admin_h, timeout=20)
+        assert c1.status_code == 201, c1.text[:200]
+        assert c2.status_code == 201, c2.text[:200]
+        return c1.json(), c2.json()
+
+    def test_returns_only_that_customers_orders(self, admin_h, product_id, two_customers):
+        c1, c2 = two_customers
+        o1 = requests.post(f"{API}/orders", json={"customer_id": c1["id"], "items": [{"product_id": product_id, "quantity": 1}]}, headers=admin_h, timeout=20)
+        o2 = requests.post(f"{API}/orders", json={"customer_id": c2["id"], "items": [{"product_id": product_id, "quantity": 2}]}, headers=admin_h, timeout=20)
+        assert o1.status_code == 201, o1.text[:200]
+        assert o2.status_code == 201, o2.text[:200]
+
+        r = requests.get(f"{API}/orders", params={"customer_id": c1["id"]}, headers=admin_h, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+        ids = [o["id"] for o in r.json()]
+        assert o1.json()["id"] in ids
+        assert o2.json()["id"] not in ids
+
+    def test_customer_with_no_orders_returns_empty_list(self, admin_h):
+        c = requests.post(f"{API}/customers", json={"name": "TEST_SemPedido", "phone": "", "notes": ""}, headers=admin_h, timeout=20).json()
+        r = requests.get(f"{API}/orders", params={"customer_id": c["id"]}, headers=admin_h, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+        assert r.json() == []
+
+    def test_history_includes_cancelled_orders(self, admin_h, product_id, two_customers):
+        c1, _ = two_customers
+        o = requests.post(f"{API}/orders", json={"customer_id": c1["id"], "items": [{"product_id": product_id, "quantity": 1}]}, headers=admin_h, timeout=20).json()
+        cancel = requests.post(f"{API}/orders/{o['id']}/cancel", headers=admin_h, timeout=20)
+        assert cancel.status_code == 200, cancel.text[:200]
+
+        r = requests.get(f"{API}/orders", params={"customer_id": c1["id"]}, headers=admin_h, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+        status_by_id = {x["id"]: x["status"] for x in r.json()}
+        assert status_by_id.get(o["id"]) == "cancelled", "historico deve incluir pedidos cancelados, nao so ativos"
+
+    def test_foreign_tenant_customer_id_returns_empty_not_other_tenant_orders(self, admin_h, beta_data):
+        """Passing another tenant's real customer_id must never leak that tenant's orders."""
+        r = requests.get(f"{API}/orders", params={"customer_id": beta_data["customer"]["id"]}, headers=admin_h, timeout=20)
+        assert r.status_code == 200, r.text[:200]
+        assert r.json() == [], "customer_id de outro tenant nao pode retornar pedidos de outro tenant"
