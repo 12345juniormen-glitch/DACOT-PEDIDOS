@@ -383,4 +383,103 @@ class TestOrderNumberConcurrency:
         order_numbers = sorted(resp.json()["order_number"] for resp in responses)
         assert len(set(order_numbers)) == n, f"order_number duplicado sob concorrência: {order_numbers}"
         # tenant novo e exclusivo para este teste: a sequência deve começar em 1001 e ser contígua
+
+
+# ---------------- Kitchen role: status rollback ----------------
+class TestKitchenStatusRollback:
+    """Kitchen (KDS) can advance new->in_preparation->ready and roll either step back,
+    but must never reach the terminal states delivered/cancelled."""
+
+    @pytest.fixture(scope="class")
+    def tenant_id(self):
+        return f"tenant-kitchen-{uuid.uuid4().hex[:8]}"
+
+    @pytest.fixture(scope="class")
+    def admin_h(self, tenant_id):
+        r = exchange(sign_handoff(tenant_id, "admin"))
+        assert r.status_code == 200, r.text[:200]
+        return {"Authorization": f"Bearer {r.json()['token']}"}
+
+    @pytest.fixture(scope="class")
+    def kitchen_h(self, tenant_id):
+        r = exchange(sign_handoff(tenant_id, "kitchen"))
+        assert r.status_code == 200, r.text[:200]
+        return {"Authorization": f"Bearer {r.json()['token']}"}
+
+    @pytest.fixture(scope="class")
+    def product_id(self, admin_h):
+        p = requests.post(f"{API}/products", json={"name": "TEST_Kitchen", "price": 9, "category": "TEST_C", "active": True},
+                          headers=admin_h, timeout=20)
+        assert p.status_code == 201, p.text[:200]
+        return p.json()["id"]
+
+    def _new_order(self, admin_h, product_id):
+        o = requests.post(f"{API}/orders", json={"items": [{"product_id": product_id, "quantity": 1}]}, headers=admin_h, timeout=20)
+        assert o.status_code == 201, o.text[:200]
+        return o.json()["id"]
+
+    def _set_status(self, headers, order_id, status):
+        return requests.patch(f"{API}/orders/{order_id}/status", json={"status": status}, headers=headers, timeout=20)
+
+    def test_kitchen_new_to_in_preparation_allowed(self, admin_h, kitchen_h, product_id):
+        oid = self._new_order(admin_h, product_id)
+        r = self._set_status(kitchen_h, oid, "in_preparation")
+        assert r.status_code == 200, r.text[:200]
+        assert r.json()["status"] == "in_preparation"
+
+    def test_kitchen_in_preparation_to_ready_allowed(self, admin_h, kitchen_h, product_id):
+        oid = self._new_order(admin_h, product_id)
+        assert self._set_status(kitchen_h, oid, "in_preparation").status_code == 200
+        r = self._set_status(kitchen_h, oid, "ready")
+        assert r.status_code == 200, r.text[:200]
+        assert r.json()["status"] == "ready"
+
+    def test_kitchen_ready_to_in_preparation_rollback_allowed(self, admin_h, kitchen_h, product_id):
+        oid = self._new_order(admin_h, product_id)
+        assert self._set_status(kitchen_h, oid, "in_preparation").status_code == 200
+        assert self._set_status(kitchen_h, oid, "ready").status_code == 200
+        r = self._set_status(kitchen_h, oid, "in_preparation")
+        assert r.status_code == 200, r.text[:200]
+        assert r.json()["status"] == "in_preparation"
+
+    def test_kitchen_in_preparation_to_new_rollback_allowed(self, admin_h, kitchen_h, product_id):
+        oid = self._new_order(admin_h, product_id)
+        assert self._set_status(kitchen_h, oid, "in_preparation").status_code == 200
+        r = self._set_status(kitchen_h, oid, "new")
+        assert r.status_code == 200, r.text[:200]
+        assert r.json()["status"] == "new"
+
+    def test_kitchen_cannot_mark_delivered(self, admin_h, kitchen_h, product_id):
+        oid = self._new_order(admin_h, product_id)
+        assert self._set_status(kitchen_h, oid, "in_preparation").status_code == 200
+        assert self._set_status(kitchen_h, oid, "ready").status_code == 200
+        r = self._set_status(kitchen_h, oid, "delivered")
+        assert r.status_code == 403, r.text[:200]
+
+    def test_kitchen_cannot_cancel(self, admin_h, kitchen_h, product_id):
+        oid = self._new_order(admin_h, product_id)
+        r = self._set_status(kitchen_h, oid, "cancelled")
+        assert r.status_code == 403, r.text[:200]
+
+    def test_ready_to_new_still_rejected_for_kitchen(self, admin_h, kitchen_h, product_id):
+        """Kitchen's expanded target set includes "new", but ALLOWED_TRANSITIONS still
+        forbids skipping straight from ready to new — only in_preparation->new is a rollback."""
+        oid = self._new_order(admin_h, product_id)
+        assert self._set_status(kitchen_h, oid, "in_preparation").status_code == 200
+        assert self._set_status(kitchen_h, oid, "ready").status_code == 200
+        r = self._set_status(kitchen_h, oid, "new")
+        assert r.status_code == 409, r.text[:200]
+
+    def test_other_roles_unaffected_waiter_can_still_deliver_and_cancel(self, tenant_id, admin_h, product_id):
+        r = exchange(sign_handoff(tenant_id, "waiter"))
+        assert r.status_code == 200, r.text[:200]
+        waiter_h = {"Authorization": f"Bearer {r.json()['token']}"}
+
+        oid = self._new_order(admin_h, product_id)
+        assert self._set_status(waiter_h, oid, "in_preparation").status_code == 200
+        assert self._set_status(waiter_h, oid, "ready").status_code == 200
+        assert self._set_status(waiter_h, oid, "delivered").status_code == 200
+
+        oid2 = self._new_order(admin_h, product_id)
+        assert self._set_status(waiter_h, oid2, "cancelled").status_code == 200
         assert order_numbers == list(range(1001, 1001 + n)), f"sequência quebrada: {order_numbers}"
