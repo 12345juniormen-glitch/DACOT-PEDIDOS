@@ -222,7 +222,7 @@ export default function DashboardPage() {
       {canSeeFinance && (
         <section>
           <SectionTitle>Vendas & desempenho hoje</SectionTitle>
-          <div className="bg-card border rounded-lg p-4 flex items-center justify-between flex-wrap gap-4">
+          <div className="bg-card border rounded-lg p-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
             <button
               type="button"
               onClick={() => setMetricDialog("revenue")}
@@ -232,24 +232,18 @@ export default function DashboardPage() {
               <div className="flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
                 Faturamento hoje <ChevronRight className="w-3 h-3 opacity-60" />
               </div>
-              <div className="mt-1 font-display text-3xl font-bold text-foreground">
+              <div className="mt-1 font-display text-2xl sm:text-3xl font-bold text-foreground">
                 {stats ? brl(stats.today_revenue) : "—"}
               </div>
             </button>
-            <div className="text-right">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Entregues (total)</div>
-              <div className="mt-1 font-display text-2xl font-semibold text-foreground" data-testid="metric-delivered">
-                {stats ? stats.delivered : "—"}
-              </div>
-            </div>
             <button
               type="button"
               onClick={() => setMetricDialog("createdToday")}
-              className="text-right rounded-md -m-1.5 p-1.5 hover:bg-muted/60 transition-colors"
+              className="text-left rounded-md -m-1.5 p-1.5 hover:bg-muted/60 transition-colors"
               data-testid="metric-orders-today"
             >
-              <div className="flex items-center justify-end gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                <ChevronRight className="w-3 h-3 opacity-60" /> Pedidos hoje
+              <div className="flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                Pedidos hoje <ChevronRight className="w-3 h-3 opacity-60" />
               </div>
               <div className="mt-1 font-display text-2xl font-semibold text-foreground">
                 {stats ? stats.orders_created_today : "—"}
@@ -258,11 +252,11 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => setMetricDialog("deliveredToday")}
-              className="text-right rounded-md -m-1.5 p-1.5 hover:bg-muted/60 transition-colors"
+              className="text-left rounded-md -m-1.5 p-1.5 hover:bg-muted/60 transition-colors"
               data-testid="metric-delivered-today"
             >
-              <div className="flex items-center justify-end gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                <ChevronRight className="w-3 h-3 opacity-60" /> Entregues hoje
+              <div className="flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                Entregues hoje <ChevronRight className="w-3 h-3 opacity-60" />
               </div>
               <div className="mt-1 font-display text-2xl font-semibold text-foreground">
                 {stats ? stats.orders_delivered_today : "—"}
@@ -271,11 +265,11 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => setMetricDialog("avgTime")}
-              className="text-right rounded-md -m-1.5 p-1.5 hover:bg-muted/60 transition-colors"
+              className="text-left rounded-md -m-1.5 p-1.5 hover:bg-muted/60 transition-colors"
               data-testid="metric-avg-total-time-today"
             >
-              <div className="flex items-center justify-end gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                <ChevronRight className="w-3 h-3 opacity-60" /> Tempo total médio hoje
+              <div className="flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                Tempo total médio hoje <ChevronRight className="w-3 h-3 opacity-60" />
               </div>
               <div className="mt-1 font-display text-2xl font-semibold text-foreground">
                 {stats && stats.avg_order_total_minutes_today != null ? formatDurationMinutes(stats.avg_order_total_minutes_today * 60000) : "—"}
