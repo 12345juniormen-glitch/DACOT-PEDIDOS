@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus, RefreshCw, ChevronRight, Clock, ChefHat, ArrowRight } from "lucide-react";
+import { Plus, RefreshCw, ChevronRight, Clock, ChefHat, ArrowRight, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusBadge, STATUS_ICON } from "@/components/StatusBadge";
 import { api, formatApiError } from "@/lib/api";
 import { brl, formatTime, STATUS_LABEL, NEXT_STATUS } from "@/lib/format";
 import { toast } from "sonner";
@@ -17,6 +17,11 @@ const COLUMNS = [
   { key: "in_preparation", label: "Em preparo" },
   { key: "ready", label: "Pronto" },
 ];
+
+// Mesmo limiar do destaque de atenção do KDS (frontend/src/pages/KitchenPage.jsx):
+// 20min+ em preparo. updated_at só muda em transição real de status (backend/modules/
+// orders/routes.py), nunca por edição de conteúdo — por isso é seguro usá-lo aqui também.
+const ATTENTION_THRESHOLD_MS = 20 * 60 * 1000;
 
 export default function DashboardPage() {
   useDocumentTitle("Dashboard");
@@ -56,6 +61,18 @@ export default function DashboardPage() {
   }, [orders]);
 
   const activeTotal = orders.length;
+
+  // Quantos pedidos em preparo já passaram do limiar de atenção — recalculado a cada
+  // atualização de `orders` (refresh automático de 30s já existente ou botão Atualizar),
+  // sem nenhum timer/polling novo.
+  const attentionCount = useMemo(
+    () => byStatus.in_preparation.filter((o) => Date.now() - new Date(o.updated_at).getTime() >= ATTENTION_THRESHOLD_MS).length,
+    [byStatus],
+  );
+
+  const scrollToColumn = (key) => {
+    document.getElementById(`column-${key}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const advance = async (o) => {
     const next = NEXT_STATUS[o.status];
@@ -101,6 +118,48 @@ export default function DashboardPage() {
         </Link>
       )}
 
+      {/* Operação agora — resumo por status para quem não abre a Cozinha (ex.: gerente),
+          com os mesmos pedidos ativos já carregados e o mesmo limiar de atenção do KDS. */}
+      <section className="mb-6" data-testid="ops-now">
+        <SectionTitle>Operação agora</SectionTitle>
+        <div className="flex flex-col sm:flex-row gap-3">
+          {COLUMNS.map((col) => {
+            const Icon = STATUS_ICON[col.key];
+            const canOpenKitchen = user?.role === "kitchen";
+            const content = (
+              <>
+                <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  {Icon && <Icon className="w-4 h-4 text-muted-foreground" />} {col.label}
+                </span>
+                <span className="font-display text-xl font-bold text-foreground">{byStatus[col.key].length}</span>
+              </>
+            );
+            const className = "flex-1 bg-card border rounded-lg px-4 py-3 flex items-center justify-between gap-3 hover:border-primary/40 transition-colors";
+            return canOpenKitchen ? (
+              <Link key={col.key} to="/cozinha" className={className} data-testid={`ops-now-${col.key}`}>
+                {content}
+              </Link>
+            ) : (
+              <button key={col.key} type="button" onClick={() => scrollToColumn(col.key)} className={`text-left ${className}`} data-testid={`ops-now-${col.key}`}>
+                {content}
+              </button>
+            );
+          })}
+        </div>
+        {attentionCount > 0 && (
+          <div
+            className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950 px-4 py-2.5 text-sm text-amber-900 dark:text-amber-200"
+            data-testid="ops-now-attention"
+          >
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>
+              <span className="font-semibold">⚠ Atenção · </span>
+              {attentionCount} pedido{attentionCount !== 1 ? "s" : ""} em preparo há mais de 20 min
+            </span>
+          </div>
+        )}
+      </section>
+
       {/* Indicadores principais — sempre corretos para qualquer papel, calculados a partir dos pedidos ativos já
           carregados (não repetem a contagem por status, que já aparece nas colunas logo abaixo) */}
       <div className="grid grid-cols-2 gap-3 mb-6 max-w-md">
@@ -113,7 +172,7 @@ export default function DashboardPage() {
         <SectionTitle>Situação atual dos pedidos</SectionTitle>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {COLUMNS.map((col) => (
-            <div key={col.key} className="bg-card border rounded-lg overflow-hidden flex flex-col" data-testid={`column-${col.key}`}>
+            <div key={col.key} id={`column-${col.key}`} className="bg-card border rounded-lg overflow-hidden flex flex-col scroll-mt-4" data-testid={`column-${col.key}`}>
               <div className="px-4 py-3 border-b flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <StatusBadge status={col.key} />
