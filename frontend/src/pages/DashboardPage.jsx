@@ -70,10 +70,6 @@ export default function DashboardPage() {
     [byStatus],
   );
 
-  const scrollToColumn = (key) => {
-    document.getElementById(`column-${key}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
   const advance = async (o) => {
     const next = NEXT_STATUS[o.status];
     if (!next) return;
@@ -125,24 +121,17 @@ export default function DashboardPage() {
         <div className="flex flex-col sm:flex-row gap-3">
           {COLUMNS.map((col) => {
             const Icon = STATUS_ICON[col.key];
-            const canOpenKitchen = user?.role === "kitchen";
-            const content = (
-              <>
+            return (
+              <div
+                key={col.key}
+                className="flex-1 bg-card border rounded-lg px-4 py-3 flex items-center justify-between gap-3"
+                data-testid={`ops-now-${col.key}`}
+              >
                 <span className="flex items-center gap-2 text-sm font-medium text-foreground">
                   {Icon && <Icon className="w-4 h-4 text-muted-foreground" />} {col.label}
                 </span>
                 <span className="font-display text-xl font-bold text-foreground">{byStatus[col.key].length}</span>
-              </>
-            );
-            const className = "flex-1 bg-card border rounded-lg px-4 py-3 flex items-center justify-between gap-3 hover:border-primary/40 transition-colors";
-            return canOpenKitchen ? (
-              <Link key={col.key} to="/cozinha" className={className} data-testid={`ops-now-${col.key}`}>
-                {content}
-              </Link>
-            ) : (
-              <button key={col.key} type="button" onClick={() => scrollToColumn(col.key)} className={`text-left ${className}`} data-testid={`ops-now-${col.key}`}>
-                {content}
-              </button>
+              </div>
             );
           })}
         </div>
@@ -172,7 +161,7 @@ export default function DashboardPage() {
         <SectionTitle>Situação atual dos pedidos</SectionTitle>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {COLUMNS.map((col) => (
-            <div key={col.key} id={`column-${col.key}`} className="bg-card border rounded-lg overflow-hidden flex flex-col scroll-mt-4" data-testid={`column-${col.key}`}>
+            <div key={col.key} className="bg-card border rounded-lg overflow-hidden flex flex-col" data-testid={`column-${col.key}`}>
               <div className="px-4 py-3 border-b flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <StatusBadge status={col.key} />
