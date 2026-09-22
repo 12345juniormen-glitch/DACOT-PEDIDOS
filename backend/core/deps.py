@@ -4,6 +4,7 @@ import jwt
 
 from core.db import get_db
 from core.security import decode_token
+from core.hub_access import check_hub_access
 
 
 # Paths that a user with must_change_password=True is still allowed to hit.
@@ -44,6 +45,10 @@ async def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Tenant da sessão não corresponde ao usuário autenticado")
     if payload.get("role") != user.get("role"):
         raise HTTPException(status_code=401, detail="Role da sessão não corresponde ao usuário autenticado")
+
+    if user.get("provisioned_by") == "hub_handoff" or user.get("hub_user_id"):
+        await check_hub_access(user["restaurant_id"], user.get("hub_user_id", ""),
+                               user["role"], payload.get("hub_access"))
 
     # If password change is required, only allow a small allow-list of routes.
     if user.get("must_change_password") and request.url.path not in _PW_LOCK_ALLOWED_PATHS:

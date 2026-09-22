@@ -1,10 +1,11 @@
 """Seed admin user + default restaurant. Idempotent."""
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 
 from core.db import get_db
-from core.security import hash_password, verify_password
+from core.security import hash_password
 
 
 async def seed_admin_and_restaurant() -> None:
@@ -40,8 +41,6 @@ async def seed_admin_and_restaurant() -> None:
         })
     else:
         updates = {}
-        if not verify_password(admin_password, existing["password_hash"]):
-            updates["password_hash"] = hash_password(admin_password)
         if existing.get("restaurant_id") != restaurant_id:
             updates["restaurant_id"] = restaurant_id
         if updates:
@@ -65,10 +64,48 @@ async def ensure_indexes() -> None:
     )
     await db.handoff_jtis.create_index("jti", unique=True)
     await db.handoff_jtis.create_index("expires_at", expireAfterSeconds=0)
+    await db.login_attempts.create_index("expires_at", expireAfterSeconds=0)
     await db.products.create_index([("restaurant_id", 1), ("id", 1)], unique=True)
     await db.products.create_index([("restaurant_id", 1), ("active", 1)])
     await db.customers.create_index([("restaurant_id", 1), ("id", 1)], unique=True)
+    # Existing installations predate ``normalized_phone``. Backfill it before
+    # applying the uniqueness index so imports also deduplicate legacy clients.
+    # When legacy data already contains duplicates, keep the first canonical
+    # value and leave the others untouched; this avoids a risky data rewrite.
+    customers = await db.customers.find(
+        {}, {"_id": 0, "id": 1, "restaurant_id": 1, "phone": 1, "normalized_phone": 1}
+    ).to_list(None)
+    seen_phones = {
+        (doc.get("restaurant_id"), doc["normalized_phone"])
+        for doc in customers
+        if doc.get("normalized_phone")
+    }
+    for customer in customers:
+        if customer.get("normalized_phone") is not None:
+            continue
+        normalized_phone = re.sub(r"\D", "", customer.get("phone", ""))
+        key = (customer.get("restaurant_id"), normalized_phone)
+        if not normalized_phone or key in seen_phones:
+            continue
+        await db.customers.update_one(
+            {"id": customer["id"], "restaurant_id": customer["restaurant_id"]},
+            {"$set": {"normalized_phone": normalized_phone}},
+        )
+        seen_phones.add(key)
+    await db.customers.create_index(
+        [("restaurant_id", 1), ("normalized_phone", 1)],
+        unique=True,
+        partialFilterExpression={"normalized_phone": {"$gt": ""}},
+    )
     await db.orders.create_index([("restaurant_id", 1), ("id", 1)], unique=True)
-    await db.orders.create_index([("restaurant_id", 1), ("status", 1)])
     await db.orders.create_index([("restaurant_id", 1), ("created_at", -1)])
+    await db.orders.create_index([("restaurant_id", 1), ("status", 1), ("created_at", -1)])
+    await db.orders.create_index([("restaurant_id", 1), ("customer_id", 1), ("created_at", -1)])
+    await db.orders.create_index([("restaurant_id", 1), ("items.product_id", 1), ("created_at", -1)])
     await db.orders.create_index([("restaurant_id", 1), ("order_number", 1)], unique=True)
+    await db.wa_conversations.create_index([("restaurant_id", 1), ("phone", 1)], unique=True)
+    await db.wa_conversations.create_index([("restaurant_id", 1), ("id", 1)], unique=True)
+    await db.wa_conversations.create_index([("restaurant_id", 1), ("last_message_at", -1)])
+    await db.wa_messages.create_index([("restaurant_id", 1), ("external_id", 1)], unique=True)
+    await db.wa_messages.create_index([("restaurant_id", 1), ("conversation_id", 1), ("created_at", -1)])
+    await db.wa_notifications.create_index([("restaurant_id", 1), ("key", 1)], unique=True)

@@ -1,9 +1,11 @@
 """Auth models & routes: login, /me. Registration is admin-only (out of scope for MVP)."""
-from datetime import datetime, timezone
+import hashlib
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
+from pymongo import ReturnDocument
 
 from core.db import get_db
 from core.deps import get_current_user
@@ -43,9 +45,29 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(payload: LoginInput):
+async def login(payload: LoginInput, request: Request):
     db = get_db()
     email = payload.email.lower().strip()
+    # Shared Mongo counters work across API workers. The account-wide bucket keeps
+    # protection effective even if a proxy changes the reported client address.
+    peer = request.client.host if request.client else "unknown"
+    now = datetime.now(timezone.utc)
+    window_seconds = 300
+    bucket = int(now.timestamp()) // window_seconds
+    for scope, value, maximum in (("peer", peer, 100), ("account", email, 10)):
+        key = hashlib.sha256(f"{scope}:{value}:{bucket}".encode()).hexdigest()
+        attempt = await db.login_attempts.find_one_and_update(
+            {"_id": key},
+            {"$inc": {"count": 1}, "$setOnInsert": {"expires_at": now + timedelta(seconds=window_seconds * 2)}},
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+        if attempt["count"] > maximum:
+            raise HTTPException(
+                status_code=429,
+                detail="Muitas tentativas de login. Tente novamente em alguns minutos.",
+                headers={"Retry-After": str(window_seconds - int(now.timestamp()) % window_seconds)},
+            )
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(payload.password, user["password_hash"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email ou senha inválidos")

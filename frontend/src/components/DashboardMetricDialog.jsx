@@ -22,8 +22,8 @@ import { toast } from "sonner";
 const KIND_CONFIG = {
   revenue: {
     title: "Faturamento de hoje",
-    description: "Pedidos criados hoje que já foram entregues — é isso que compõe o valor do faturamento.",
-    params: { status: "delivered", today_only: true, limit: 500 },
+    description: "Somente pedidos entregues hoje compõem o faturamento de hoje.",
+    params: { delivered_today_only: true, limit: 500 },
   },
   createdToday: {
     title: "Pedidos de hoje",

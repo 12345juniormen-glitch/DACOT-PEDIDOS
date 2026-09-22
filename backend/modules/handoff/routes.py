@@ -13,7 +13,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import httpx
 import jwt
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -21,6 +20,7 @@ from pymongo.errors import DuplicateKeyError
 
 from core.db import get_db
 from core.security import create_access_token
+from core.hub_access import check_hub_access, validate_context
 
 
 ALLOWED_MODULE_IDS = {"orders", "pedidos"}
@@ -120,6 +120,11 @@ def _decode_handoff(token: str) -> dict[str, Any]:
     if not sub.startswith("tenant_user:") or len(sub) <= len("tenant_user:"):
         _fail("sub inválido (esperado tenant_user:<id>)")
 
+    validate_context(payload.get("hub_access"))
+    if (type(payload["iat"]) is not int or type(payload["exp"]) is not int
+            or not 0 < payload["exp"] - payload["iat"] <= 60):
+        _fail("validade máxima de handoff é 60 segundos")
+
     return payload
 
 
@@ -138,27 +143,6 @@ async def _consume_jti(jti: str, exp_ts: int) -> None:
         _fail("token já utilizado (replay detectado)")
 
 
-async def _check_module_active(restaurant_id: str) -> None:
-    base = _cfg("HUB_BASE_URL")
-    module_key = _cfg("MODULE_API_KEY")
-    module_id = _cfg("HANDOFF_MODULE_ID")
-    url = f"{base.rstrip('/')}/api/public/tenants/{restaurant_id}/modules/{module_id}/status"
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(url, headers={"X-Module-Key": module_key})
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=503, detail=f"Hub inacessível: {type(e).__name__}")
-    if r.status_code == 404:
-        raise HTTPException(status_code=403, detail="Tenant não encontrado no Hub")
-    if r.status_code == 401 or r.status_code == 403:
-        raise HTTPException(status_code=503, detail="Módulo não autorizado a consultar Hub (X-Module-Key)")
-    if r.status_code != 200:
-        raise HTTPException(status_code=503, detail=f"Hub retornou {r.status_code}")
-    data = r.json()
-    if not data.get("active"):
-        raise HTTPException(status_code=403, detail="Módulo Pedidos inativo para este restaurante")
-
-
 async def _find_or_create_restaurant(restaurant_id: str) -> dict:
     """Auto-provision local restaurants record if missing (Hub is the source of truth)."""
     db = get_db()
@@ -173,7 +157,15 @@ async def _find_or_create_restaurant(restaurant_id: str) -> dict:
         "created_at": now,
         "provisioned_by": "hub_handoff",
     }
-    await db.restaurants.insert_one(doc)
+    try:
+        await db.restaurants.insert_one(doc)
+    except DuplicateKeyError:
+        # Another handoff may have provisioned this same tenant after find_one.
+        # Reuse only the exact restaurant requested; do not mask other conflicts.
+        r = await db.restaurants.find_one({"id": restaurant_id}, {"_id": 0})
+        if r:
+            return r
+        raise
     return doc
 
 
@@ -238,7 +230,7 @@ async def exchange(payload: ExchangeInput):
     hub_user_id = str(handoff_claims["sub"]).split(":", 1)[1]
 
     # Check module active on the Hub (source of truth). Only after JWT is fully validated.
-    await _check_module_active(restaurant_id)
+    await check_hub_access(restaurant_id, hub_user_id, role, handoff_claims["hub_access"], fresh=True)
 
     # Auto-provision (idempotent)
     await _find_or_create_restaurant(restaurant_id)
@@ -252,6 +244,7 @@ async def exchange(payload: ExchangeInput):
         role=user["role"],
         email=user["email"],
         expire_minutes=session_minutes,
+        hub_access=handoff_claims["hub_access"],
     )
 
     user_out = ExchangeUser(

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Search, ClipboardList } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -22,27 +23,64 @@ export default function OrdersHistoryPage() {
   const [orders, setOrders] = useState([]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [customerId, setCustomerId] = useState("all");
+  const [productId, setProductId] = useState("all");
+  const [customers, setCustomers] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(0);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const params = {};
-      if (statusFilter !== "all") params.status = statusFilter;
-      if (search.trim()) params.search = search.trim();
-      const { data } = await api.get("/orders", { params });
-      setOrders(data);
-    } catch (e) {
-      toast.error(formatApiError(e));
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([api.get("/customers"), api.get("/products")])
+      .then(([customerRes, productRes]) => {
+        if (!cancelled) {
+          setCustomers(customerRes.data);
+          setProducts(productRes.data);
+        }
+      })
+      .catch((e) => { if (!cancelled) toast.error(formatApiError(e)); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- busca por texto só dispara no Enter, não a cada tecla
-  }, [statusFilter]);
+    const timer = setTimeout(() => {
+      setAppliedSearch(search.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const params = { page, page_size: 25 };
+    if (statusFilter !== "all") params.status = statusFilter;
+    if (customerId !== "all") params.customer_id = customerId;
+    if (productId !== "all") params.product_id = productId;
+    if (fromDate) params.created_from = fromDate;
+    if (toDate) params.created_to = toDate;
+    if (appliedSearch) params.search = appliedSearch;
+    setLoading(true);
+    setOrders([]);
+    setTotal(0);
+    setPages(0);
+    api.get("/orders/history", { params })
+      .then(({ data }) => {
+        if (!cancelled) {
+          setOrders(data.items);
+          setPages(data.pages);
+          setTotal(data.total);
+        }
+      })
+      .catch((e) => { if (!cancelled) toast.error(formatApiError(e)); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [statusFilter, customerId, productId, fromDate, toDate, appliedSearch, page]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto">
@@ -55,12 +93,12 @@ export default function OrdersHistoryPage() {
             placeholder="Buscar por número do pedido ou cliente..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && load()}
+            onKeyDown={(e) => { if (e.key === "Enter") { setAppliedSearch(search.trim()); setPage(1); } }}
             className="pl-9"
             data-testid="history-search-input"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); setPage(1); }}>
           <SelectTrigger className="w-full sm:w-56" data-testid="history-status-filter">
             <SelectValue />
           </SelectTrigger>
@@ -71,6 +109,25 @@ export default function OrdersHistoryPage() {
                 <StatusBadge status={s} />
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <Input type="date" aria-label="Criado a partir de" value={fromDate} onChange={(e) => { setFromDate(e.target.value); setPage(1); }} />
+        <Input type="date" aria-label="Criado até" value={toDate} onChange={(e) => { setToDate(e.target.value); setPage(1); }} />
+        <Select value={customerId} onValueChange={(value) => { setCustomerId(value); setPage(1); }}>
+          <SelectTrigger aria-label="Filtrar por cliente"><SelectValue placeholder="Todos os clientes" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os clientes</SelectItem>
+            {customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={productId} onValueChange={(value) => { setProductId(value); setPage(1); }}>
+          <SelectTrigger aria-label="Filtrar por produto"><SelectValue placeholder="Todos os produtos" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os produtos</SelectItem>
+            {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
@@ -97,7 +154,7 @@ export default function OrdersHistoryPage() {
                 <EmptyState
                   icon={ClipboardList}
                   title="Nenhum pedido encontrado"
-                  description={statusFilter !== "all" || search ? "Tente ajustar a busca ou o filtro de status." : "Os pedidos criados vão aparecer aqui."}
+                  description={statusFilter !== "all" || search || customerId !== "all" || productId !== "all" || fromDate || toDate ? "Tente ajustar a busca ou os filtros." : "Os pedidos criados vão aparecer aqui."}
                 />
               </td></tr>
             )}
@@ -121,6 +178,15 @@ export default function OrdersHistoryPage() {
         </table>
         </div>
       </div>
+      {!loading && total > 0 && (
+        <div className="flex items-center justify-between gap-3 mt-4 text-sm text-muted-foreground">
+          <span>{total} pedido{total !== 1 ? "s" : ""} · página {page} de {pages}</span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Anterior</Button>
+            <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>Próxima</Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

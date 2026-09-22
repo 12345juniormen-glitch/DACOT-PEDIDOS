@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, Pencil, Users } from "lucide-react";
+import { Download, Plus, Pencil, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CustomerFormDialog } from "@/components/CustomerFormDialog";
+import { CustomerImportDialog } from "@/components/CustomerImportDialog";
 import { CustomerDetailDialog } from "@/components/CustomerDetailDialog";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -14,6 +15,7 @@ export default function CustomersPage() {
   useDocumentTitle("Clientes");
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -51,11 +53,14 @@ export default function CustomersPage() {
       <PageHeader
         title="Clientes"
         subtitle="Cadastro para vincular aos pedidos"
-        action={
+        action={<div className="flex gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)} data-testid="import-customers-button">
+            <Download className="w-4 h-4 mr-1.5" /> Importar contatos
+          </Button>
           <Button onClick={openCreate} data-testid="new-customer-button">
             <Plus className="w-4 h-4 mr-1.5" /> Novo Cliente
           </Button>
-        }
+        </div>}
       />
 
       <div className="bg-card border rounded-lg overflow-hidden">
@@ -106,6 +111,7 @@ export default function CustomersPage() {
       </div>
 
       <CustomerFormDialog open={open} onOpenChange={setOpen} editing={editing} onSaved={load} />
+      <CustomerImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={load} />
       <CustomerDetailDialog open={!!viewing} onOpenChange={(v) => !v && setViewing(null)} customer={viewing} />
     </div>
   );

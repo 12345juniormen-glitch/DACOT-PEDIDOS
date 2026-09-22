@@ -1,4 +1,4 @@
-// Linha do tempo do pedido — só usa timestamps que os dados atuais permitem afirmar com
+// Fallback para pedidos antigos sem eventos — só usa timestamps que permitem afirmar com
 // certeza: created_at (fixo), o timestamp do status ATUAL (updated_at/delivered_at/
 // cancelled_at, conforme o caso) e nada mais. updated_at é sobrescrito a cada transição de
 // status real (backend/modules/orders/routes.py, inclusive rollback), então nunca
@@ -35,6 +35,22 @@ export function buildTimelineEvents(order) {
     events.push({ label: stage.label, at: stageAt, status: order.status });
   }
   return events;
+}
+
+/** Eventos novos são gravados atomicamente com o pedido, inclusive rollbacks. */
+export function buildAuditTimelineEvents(order, auditEvents) {
+  if (!auditEvents?.length) return buildTimelineEvents(order);
+  const timeline = auditEvents.map((event) => ({
+    id: event.id,
+    label: event.type === "created" ? "Pedido criado" : event.type === "updated" ? "Pedido editado" : CURRENT_STATUS_TIMELINE[event.new_status]?.label || event.new_status,
+    at: event.occurred_at,
+    status: event.type === "status_changed" ? event.new_status : null,
+  }));
+  // Pedidos legados podem começar a ter eventos só após sua próxima transição.
+  if (!auditEvents.some((event) => event.type === "created")) {
+    timeline.unshift({ label: "Pedido criado", at: order.created_at, status: null });
+  }
+  return timeline;
 }
 
 /** created_at -> fim (delivered_at/cancelled_at) ou -> agora se ainda ativo. null se um

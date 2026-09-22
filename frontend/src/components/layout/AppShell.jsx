@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { LayoutDashboard, ClipboardList, History, Package, Users, LogOut, UtensilsCrossed, ShieldCheck, UserCircle, ChefHat, Menu, Search } from "lucide-react";
+import { LayoutDashboard, ClipboardList, History, Package, Users, LogOut, UtensilsCrossed, ShieldCheck, UserCircle, ChefHat, Menu, Search, MessageCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -13,6 +13,7 @@ const NAV_ALL = [
   { to: "/pedidos/novo", label: "Novo Pedido", icon: ClipboardList, testid: "nav-new-order", roles: ["admin", "manager", "waiter"] },
   { to: "/cozinha", label: "Cozinha", icon: ChefHat, testid: "nav-kitchen", roles: ["kitchen"] },
   { to: "/historico", label: "Histórico", icon: History, testid: "nav-history", roles: ["admin", "manager", "waiter", "kitchen"] },
+  { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle, testid: "nav-whatsapp", roles: ["admin", "manager", "waiter"] },
   { to: "/produtos", label: "Produtos", icon: Package, testid: "nav-products", roles: ["admin", "manager"] },
   { to: "/clientes", label: "Clientes", icon: Users, testid: "nav-customers", roles: ["admin", "manager", "waiter"] },
   { to: "/usuarios", label: "Usuários", icon: ShieldCheck, testid: "nav-users", roles: ["admin"] },

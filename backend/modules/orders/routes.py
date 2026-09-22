@@ -6,17 +6,19 @@
 - Cancellation is non-destructive: sets status='cancelled' + `cancelled_at`.
 - Status transitions are validated to keep data consistent.
 """
+import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal, Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from core.db import get_db
 from core.deps import Tenant, get_tenant, require_roles
 from core.money import cents_to_reais, reais_to_cents
+from modules.whatsapp.service import notify_order
 
 
 OrderStatus = Literal["new", "in_preparation", "ready", "delivered", "cancelled"]
@@ -108,6 +110,25 @@ class OrderOut(BaseModel):
     delivered_at: Optional[str] = None
 
 
+class OrderEventOut(BaseModel):
+    id: str
+    restaurant_id: str
+    order_id: str
+    type: Literal["created", "updated", "status_changed"]
+    previous_status: Optional[OrderStatus] = None
+    new_status: OrderStatus
+    user_id: str
+    occurred_at: str
+
+
+class OrderHistoryPage(BaseModel):
+    items: list[OrderOut]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
 # ---------- Helpers ----------
 def _compute_totals(items_docs: list[dict], discount_type: str, discount_value: float) -> tuple[int, int, int]:
     subtotal_cents = sum(i["unit_price_cents"] * i["quantity"] for i in items_docs)
@@ -178,6 +199,19 @@ def _to_out(doc: dict) -> OrderOut:
         cancelled_at=doc.get("cancelled_at"),
         delivered_at=doc.get("delivered_at"),
     )
+
+
+def _order_event(tenant: Tenant, order_id: str, kind: str, previous: Optional[str], current: str, at: str) -> dict:
+    return {
+        "id": str(uuid.uuid4()),
+        "restaurant_id": tenant.restaurant_id,
+        "order_id": order_id,
+        "type": kind,
+        "previous_status": previous,
+        "new_status": current,
+        "user_id": tenant.user_id,
+        "occurred_at": at,
+    }
 
 
 async def _next_order_number(db, restaurant_id: str) -> int:
@@ -274,8 +308,53 @@ async def list_orders(
         if s.isdigit():
             or_clauses.append({"order_number": int(s)})
         q["$or"] = or_clauses
-    docs = await db.orders.find(q, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    docs = await db.orders.find(q, {"_id": 0, "events": 0}).sort("created_at", -1).limit(limit).to_list(limit)
     return [_to_out(d) for d in docs]
+
+
+@router.get("/history", response_model=OrderHistoryPage)
+async def order_history(
+    tenant: Tenant = Depends(get_tenant),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=50),
+    status_filter: Optional[OrderStatus] = Query(None, alias="status"),
+    customer_id: Optional[str] = None,
+    product_id: Optional[str] = None,
+    created_from: Optional[date] = None,
+    created_to: Optional[date] = None,
+    search: str = Query("", max_length=120),
+):
+    """Bounded history page; every filter is ANDed within the authenticated tenant."""
+    if created_from and created_to and created_from > created_to:
+        raise HTTPException(status_code=422, detail="Período inválido")
+    q: dict = {"restaurant_id": tenant.restaurant_id}
+    if status_filter:
+        q["status"] = status_filter
+    if customer_id:
+        q["customer_id"] = customer_id
+    if product_id:
+        q["items.product_id"] = product_id
+    if created_from or created_to:
+        bounds = {}
+        if created_from:
+            bounds["$gte"] = datetime.combine(created_from, datetime.min.time(), RESTAURANT_TZ).astimezone(timezone.utc).isoformat()
+        if created_to:
+            bounds["$lt"] = datetime.combine(created_to + timedelta(days=1), datetime.min.time(), RESTAURANT_TZ).astimezone(timezone.utc).isoformat()
+        q["created_at"] = bounds
+    if search.strip():
+        s = search.strip()
+        number_text = s.removeprefix("#")
+        clauses = [{"customer_name": {"$regex": re.escape(s), "$options": "i"}}]
+        if number_text.isdigit():
+            clauses.append({"order_number": int(number_text)})
+        q["$or"] = clauses
+    db = get_db()
+    total = await db.orders.count_documents(q)
+    docs = await db.orders.find(q, {"_id": 0, "events": 0}).sort("created_at", -1).skip((page - 1) * page_size).limit(page_size).to_list(page_size)
+    return OrderHistoryPage(
+        items=[_to_out(d) for d in docs], page=page, page_size=page_size,
+        total=total, pages=(total + page_size - 1) // page_size,
+    )
 
 
 @router.get("/stats")
@@ -288,13 +367,13 @@ async def orders_stats(tenant: Tenant = Depends(require_roles("admin", "manager"
     result = {"new": 0, "in_preparation": 0, "ready": 0, "delivered": 0, "cancelled": 0}
     async for row in db.orders.aggregate(pipeline):
         result[row["_id"]] = row["count"]
-    # today's revenue (delivered only) — day boundary is local midnight, converted to UTC
+    # Revenue belongs to the day of delivery, not the day the order was created.
     today_start, today_end = _today_bounds_utc()
     today_pipeline = [
         {"$match": {
             "restaurant_id": tenant.restaurant_id,
             "status": "delivered",
-            "created_at": {"$gte": today_start},
+            "delivered_at": {"$gte": today_start, "$lt": today_end},
         }},
         {"$group": {"_id": None, "total": {"$sum": "$total_cents"}}},
     ]
@@ -338,7 +417,7 @@ async def orders_stats(tenant: Tenant = Depends(require_roles("admin", "manager"
 
 
 @router.post("", response_model=OrderOut, status_code=201)
-async def create_order(payload: OrderCreateInput, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+async def create_order(payload: OrderCreateInput, background_tasks: BackgroundTasks, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
     db = get_db()
     items_snap = await _build_items_snapshot(db, tenant.restaurant_id, payload.items)
     subtotal_c, discount_c, total_c = _compute_totals(items_snap, payload.discount_type, payload.discount_value)
@@ -363,23 +442,36 @@ async def create_order(payload: OrderCreateInput, tenant: Tenant = Depends(requi
         "updated_at": now,
         "created_by": tenant.user_id,
     }
+    doc["events"] = [_order_event(tenant, doc["id"], "created", None, "new", now)]
     await db.orders.insert_one(doc)
+    background_tasks.add_task(notify_order, doc, "created")
     return _to_out(doc)
 
 
 @router.get("/{order_id}", response_model=OrderOut)
 async def get_order(order_id: str, tenant: Tenant = Depends(get_tenant)):
     db = get_db()
-    doc = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0})
+    doc = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0, "events": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
     return _to_out(doc)
 
 
+@router.get("/{order_id}/events", response_model=list[OrderEventOut])
+async def get_order_events(order_id: str, tenant: Tenant = Depends(get_tenant)):
+    doc = await get_db().orders.find_one(
+        {"id": order_id, "restaurant_id": tenant.restaurant_id},
+        {"_id": 0, "events": 1},
+    )
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado")
+    return [OrderEventOut(**event) for event in doc.get("events", [])]
+
+
 @router.put("/{order_id}", response_model=OrderOut)
 async def update_order(order_id: str, payload: OrderUpdateInput, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
     db = get_db()
-    existing = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0})
+    existing = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0, "events": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
     if existing["status"] not in {"new", "in_preparation"}:
@@ -405,23 +497,25 @@ async def update_order(order_id: str, payload: OrderUpdateInput, tenant: Tenant 
         # order's content is not a status change.
     }
     updated = await db.orders.find_one_and_update(
-        {"id": order_id, "restaurant_id": tenant.restaurant_id},
-        {"$set": updates},
+        {"id": order_id, "restaurant_id": tenant.restaurant_id, "status": existing["status"]},
+        {"$set": updates, "$push": {"events": _order_event(tenant, order_id, "updated", existing["status"], existing["status"], datetime.now(timezone.utc).isoformat())}},
         return_document=True,
-        projection={"_id": 0},
+        projection={"_id": 0, "events": 0},
     )
+    if not updated:
+        raise HTTPException(status_code=409, detail="Status alterado por outra ação; atualize o pedido")
     return _to_out(updated)
 
 
 @router.patch("/{order_id}/status", response_model=OrderOut)
-async def change_status(order_id: str, payload: OrderStatusInput, tenant: Tenant = Depends(get_tenant)):
+async def change_status(order_id: str, payload: OrderStatusInput, tenant: Tenant = Depends(get_tenant), background_tasks: BackgroundTasks = None):
     # Kitchen: can move within the active pipeline (advance new→in_preparation→ready, or roll
     # back a mistaken advance) but never touch the terminal states delivered/cancelled.
     # The origin check is enforced by ALLOWED_TRANSITIONS below (kitchen can't skip states).
     if tenant.role == "kitchen" and payload.status not in {"new", "in_preparation", "ready"}:
         raise HTTPException(status_code=403, detail="Cozinha só pode iniciar preparo, marcar como Pronto ou desfazer esses passos")
     db = get_db()
-    existing = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0})
+    existing = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0, "events": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
     current = existing["status"]
@@ -438,23 +532,27 @@ async def change_status(order_id: str, payload: OrderStatusInput, tenant: Tenant
         updates["delivered_at"] = updates["updated_at"]
 
     updated = await db.orders.find_one_and_update(
-        {"id": order_id, "restaurant_id": tenant.restaurant_id},
-        {"$set": updates},
+        {"id": order_id, "restaurant_id": tenant.restaurant_id, "status": current},
+        {"$set": updates, "$push": {"events": _order_event(tenant, order_id, "status_changed", current, target, updates["updated_at"])}},
         return_document=True,
-        projection={"_id": 0},
+        projection={"_id": 0, "events": 0},
     )
+    if not updated:
+        raise HTTPException(status_code=409, detail="Status alterado por outra ação; atualize o pedido")
+    if background_tasks is not None and target in {"in_preparation", "ready", "delivered", "cancelled"}:
+        background_tasks.add_task(notify_order, updated, target)
     return _to_out(updated)
 
 
 @router.post("/{order_id}/cancel", response_model=OrderOut)
-async def cancel_order(order_id: str, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
-    return await change_status(order_id, OrderStatusInput(status="cancelled"), tenant)
+async def cancel_order(order_id: str, background_tasks: BackgroundTasks, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+    return await change_status(order_id, OrderStatusInput(status="cancelled"), tenant, background_tasks)
 
 
 @router.post("/{order_id}/duplicate", response_model=OrderOut, status_code=201)
 async def duplicate_order(order_id: str, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
     db = get_db()
-    src = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0})
+    src = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0, "events": 0})
     if not src:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
 
@@ -486,5 +584,6 @@ async def duplicate_order(order_id: str, tenant: Tenant = Depends(require_roles(
         "created_by": tenant.user_id,
         "duplicated_from": src["id"],
     }
+    doc["events"] = [_order_event(tenant, doc["id"], "created", None, "new", now)]
     await db.orders.insert_one(doc)
     return _to_out(doc)

@@ -1,5 +1,6 @@
 import {
   buildTimelineEvents,
+  buildAuditTimelineEvents,
   computeTotalDurationMs,
   computeUntilCurrentDurationMs,
   formatDurationMinutes,
@@ -24,10 +25,8 @@ describe("buildTimelineEvents", () => {
     expect(events[1]).toMatchObject({ label: "Em preparo", at: order.updated_at, status: "in_preparation" });
   });
 
-  test("pronto após rollback (ready->in_preparation->ready): não reconstrói o 'Pronto' anterior perdido", () => {
-    // updated_at reflete só a transição mais recente para "ready" — o horário do primeiro
-    // "Pronto" (antes do rollback) já não existe em lugar nenhum, e a timeline não pode
-    // inventá-lo. Isso é o comportamento correto, não um bug.
+  test("pedido legado pronto após rollback: não reconstrói o 'Pronto' anterior", () => {
+    // Para pedidos sem eventos, updated_at reflete só a transição mais recente.
     const order = { ...baseOrder, status: "ready", updated_at: "2026-01-01T19:30:00.000Z" };
     const events = buildTimelineEvents(order);
     expect(events).toHaveLength(2);
@@ -59,6 +58,33 @@ describe("buildTimelineEvents", () => {
     const events = buildTimelineEvents(order);
     expect(events).toHaveLength(2);
     expect(events[1]).toMatchObject({ label: "Cancelado", at: order.cancelled_at, status: "cancelled" });
+  });
+});
+
+describe("buildAuditTimelineEvents", () => {
+  test("preserva todas as transições, inclusive rollback", () => {
+    const order = { ...baseOrder, status: "ready", updated_at: "2026-01-01T19:30:00.000Z" };
+    const audit = [
+      { id: "1", type: "created", new_status: "new", occurred_at: order.created_at },
+      { id: "2", type: "status_changed", new_status: "in_preparation", occurred_at: "2026-01-01T19:08:00.000Z" },
+      { id: "3", type: "status_changed", new_status: "ready", occurred_at: "2026-01-01T19:21:00.000Z" },
+      { id: "4", type: "status_changed", new_status: "in_preparation", occurred_at: "2026-01-01T19:24:00.000Z" },
+      { id: "5", type: "status_changed", new_status: "ready", occurred_at: "2026-01-01T19:30:00.000Z" },
+    ];
+    expect(buildAuditTimelineEvents(order, audit).map((e) => e.label)).toEqual([
+      "Pedido criado", "Em preparo", "Pronto", "Em preparo", "Pronto",
+    ]);
+  });
+
+  test("pedidos antigos sem eventos mantêm o fallback honesto", () => {
+    const order = { ...baseOrder, status: "ready", updated_at: "2026-01-01T19:30:00.000Z" };
+    expect(buildAuditTimelineEvents(order, [])).toEqual(buildTimelineEvents(order));
+  });
+
+  test("pedido legado que ganhou eventos conserva a criação conhecida", () => {
+    const order = { ...baseOrder, status: "ready" };
+    const audit = [{ id: "later", type: "status_changed", new_status: "ready", occurred_at: "2026-01-01T19:30:00.000Z" }];
+    expect(buildAuditTimelineEvents(order, audit).map((e) => e.label)).toEqual(["Pedido criado", "Pronto"]);
   });
 });
 

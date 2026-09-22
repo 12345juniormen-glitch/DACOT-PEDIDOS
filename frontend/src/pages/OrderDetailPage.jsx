@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Copy, RotateCcw, XCircle, Pencil, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,9 +16,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { StatusBadge, STATUS_ICON } from "@/components/StatusBadge";
 import { api, formatApiError } from "@/lib/api";
-import { brl, formatDateTime, formatTime, STATUS_LABEL, STATUS_ORDER } from "@/lib/format";
-import { buildTimelineEvents, computeTotalDurationMs, computeUntilCurrentDurationMs, formatDurationMinutes } from "@/lib/orderTimeline";
+import { brl, formatDateTime, STATUS_LABEL, STATUS_ORDER } from "@/lib/format";
+import { buildAuditTimelineEvents, computeTotalDurationMs, computeUntilCurrentDurationMs, formatDurationMinutes } from "@/lib/orderTimeline";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 
 // Mirrors backend ALLOWED_TRANSITIONS (backend/modules/orders/routes.py).
@@ -45,15 +46,25 @@ const NEXT_STATUS = {
 export default function OrderDetailPage() {
   const { id } = useParams();
   const nav = useNavigate();
+  const { user } = useAuth();
   const [order, setOrder] = useState(null);
+  const [auditEvents, setAuditEvents] = useState(null);
+  const loadVersion = useRef(0);
   const [busy, setBusy] = useState(false);
   useDocumentTitle(order ? `Pedido #${order.order_number}` : "Pedido");
 
   const load = async () => {
+    const version = ++loadVersion.current;
     try {
       const { data } = await api.get(`/orders/${id}`);
+      if (version !== loadVersion.current) return;
       setOrder(data);
+      setAuditEvents(null);
+      api.get(`/orders/${id}/events`)
+        .then(({ data: events }) => { if (version === loadVersion.current) setAuditEvents(events); })
+        .catch(() => { if (version === loadVersion.current) setAuditEvents(null); });
     } catch (e) {
+      if (version !== loadVersion.current) return;
       toast.error(formatApiError(e));
       nav("/");
     }
@@ -61,6 +72,7 @@ export default function OrderDetailPage() {
 
   useEffect(() => {
     load();
+    return () => { loadVersion.current += 1; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deve rodar só quando o id muda; load muda a cada render
   }, [id]);
 
@@ -92,10 +104,12 @@ export default function OrderDetailPage() {
 
   if (!order) return <div className="p-8 text-sm text-muted-foreground">Carregando…</div>;
 
-  const editable = order.status === "new" || order.status === "in_preparation";
-  const cancellable = TRANSITIONS[order.status].includes("cancelled");
+  const canManageOrder = ["admin", "manager", "waiter"].includes(user?.role);
+  const editable = canManageOrder && (order.status === "new" || order.status === "in_preparation");
+  const cancellable = canManageOrder && TRANSITIONS[order.status].includes("cancelled");
+  const nextStatus = user?.role === "kitchen" && order.status === "ready" ? null : NEXT_STATUS[order.status];
 
-  const timelineEvents = buildTimelineEvents(order).map((ev) => ({
+  const timelineEvents = buildAuditTimelineEvents(order, auditEvents).map((ev) => ({
     ...ev,
     icon: ev.status ? STATUS_ICON[ev.status] : Circle,
   }));
@@ -103,7 +117,7 @@ export default function OrderDetailPage() {
   const totalDuration = totalDurationMs != null ? formatDurationMinutes(totalDurationMs) : null;
   const untilCurrentDurationMs = computeUntilCurrentDurationMs(order);
   const untilCurrentDuration = untilCurrentDurationMs != null ? formatDurationMinutes(untilCurrentDurationMs) : null;
-  const currentStageLabel = timelineEvents[timelineEvents.length - 1]?.label;
+  const currentStageLabel = STATUS_LABEL[order.status];
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
@@ -131,9 +145,11 @@ export default function OrderDetailPage() {
               </Button>
             </Link>
           )}
-          <Button variant="outline" size="sm" onClick={duplicate} disabled={busy} data-testid="duplicate-order-button">
-            <Copy className="w-4 h-4 mr-1.5" /> Duplicar
-          </Button>
+          {canManageOrder && (
+            <Button variant="outline" size="sm" onClick={duplicate} disabled={busy} data-testid="duplicate-order-button">
+              <Copy className="w-4 h-4 mr-1.5" /> Duplicar
+            </Button>
+          )}
           {cancellable && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -161,7 +177,7 @@ export default function OrderDetailPage() {
       </header>
 
       {/* Status advance/rollback actions */}
-      {(PREV_STATUS[order.status] || NEXT_STATUS[order.status]) && (
+      {(PREV_STATUS[order.status] || nextStatus) && (
         <Card className="mb-6">
           <CardContent className="p-4 flex flex-wrap items-center gap-3">
             {PREV_STATUS[order.status] && (
@@ -178,16 +194,16 @@ export default function OrderDetailPage() {
                 </Button>
               </>
             )}
-            {NEXT_STATUS[order.status] && (
+            {nextStatus && (
               <>
                 <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold sm:ml-2">Avançar para</div>
                 <Button
                   size="sm"
-                  onClick={() => changeStatus(NEXT_STATUS[order.status])}
+                  onClick={() => changeStatus(nextStatus)}
                   disabled={busy}
-                  data-testid={`advance-to-${NEXT_STATUS[order.status]}`}
+                  data-testid={`advance-to-${nextStatus}`}
                 >
-                  {STATUS_LABEL[NEXT_STATUS[order.status]]}
+                  {STATUS_LABEL[nextStatus]}
                 </Button>
               </>
             )}
@@ -203,12 +219,12 @@ export default function OrderDetailPage() {
             {timelineEvents.map((ev, idx) => {
               const Icon = ev.icon;
               return (
-                <li key={idx} className="flex items-center gap-3" data-testid={`timeline-event-${idx}`}>
+                <li key={ev.id || idx} className="flex items-center gap-3" data-testid={`timeline-event-${idx}`}>
                   <span className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
                     {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground" />}
                   </span>
                   <span className="flex-1 min-w-0 text-sm font-medium text-foreground">{ev.label}</span>
-                  <span className="text-sm text-muted-foreground shrink-0">{formatTime(ev.at)}</span>
+                  <span className="text-sm text-muted-foreground shrink-0">{formatDateTime(ev.at)}</span>
                 </li>
               );
             })}

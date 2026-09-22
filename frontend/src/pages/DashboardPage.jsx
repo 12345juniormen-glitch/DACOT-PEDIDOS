@@ -75,7 +75,7 @@ export default function DashboardPage() {
 
   const advance = async (o) => {
     const next = NEXT_STATUS[o.status];
-    if (!next) return;
+    if (!next || (user?.role === "kitchen" && next === "delivered")) return;
     try {
       await api.patch(`/orders/${o.id}/status`, { status: next });
       toast.success(`Pedido #${o.order_number} → ${STATUS_LABEL[next]}`);
@@ -95,11 +95,13 @@ export default function DashboardPage() {
             <Button variant="outline" onClick={load} disabled={loading} data-testid="refresh-orders-button" size="sm">
               <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} /> Atualizar
             </Button>
-            <Link to="/pedidos/novo">
-              <Button data-testid="create-order-button" size="sm">
-                <Plus className="w-4 h-4 mr-1.5" /> Novo Pedido
-              </Button>
-            </Link>
+            {user?.role !== "kitchen" && (
+              <Link to="/pedidos/novo">
+                <Button data-testid="create-order-button" size="sm">
+                  <Plus className="w-4 h-4 mr-1.5" /> Novo Pedido
+                </Button>
+              </Link>
+            )}
           </>
         }
       />
@@ -193,7 +195,7 @@ export default function DashboardPage() {
                     <div className="text-xs text-muted-foreground mt-0.5">
                       {o.items.length} ite{o.items.length !== 1 ? "ns" : "m"} · {brl(o.total)}
                     </div>
-                    {NEXT_STATUS[o.status] && (
+                    {NEXT_STATUS[o.status] && !(user?.role === "kitchen" && NEXT_STATUS[o.status] === "delivered") && (
                       <button
                         onClick={() => advance(o)}
                         data-testid={`advance-${o.order_number}`}

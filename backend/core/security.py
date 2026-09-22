@@ -24,7 +24,8 @@ def _get_secret() -> str:
     return os.environ["JWT_SECRET"]
 
 
-def create_access_token(user_id: str, restaurant_id: str, role: str, email: str, expire_minutes: int | None = None) -> str:
+def create_access_token(user_id: str, restaurant_id: str, role: str, email: str, expire_minutes: int | None = None,
+                        hub_access: dict | None = None) -> str:
     if expire_minutes is None:
         expire_minutes = int(os.environ.get("JWT_EXPIRE_MINUTES", "720"))
     payload = {
@@ -36,6 +37,8 @@ def create_access_token(user_id: str, restaurant_id: str, role: str, email: str,
         "exp": datetime.now(timezone.utc) + timedelta(minutes=expire_minutes),
         "iat": datetime.now(timezone.utc),
     }
+    if hub_access is not None:
+        payload["hub_access"] = hub_access
     return jwt.encode(payload, _get_secret(), algorithm=JWT_ALGORITHM)
 
 

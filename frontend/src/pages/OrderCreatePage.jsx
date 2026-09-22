@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, Minus, Trash2, Search, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,8 @@ const CREATE_CUSTOMER = "__create_customer__";
 export default function OrderCreatePage() {
   useDocumentTitle("Novo Pedido");
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const preselectedCustomer = searchParams.get("customer");
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [productSearch, setProductSearch] = useState("");
@@ -46,11 +48,16 @@ export default function OrderCreatePage() {
         ]);
         setProducts(p.data);
         setCustomers(c.data);
+        if (preselectedCustomer) {
+          const { data: customer } = await api.get(`/customers/${encodeURIComponent(preselectedCustomer)}`);
+          setCustomerId(customer.id);
+          if (!c.data.some((item) => item.id === customer.id)) setCustomers([...c.data, customer]);
+        }
       } catch (e) {
         toast.error(formatApiError(e));
       }
     })();
-  }, []);
+  }, [preselectedCustomer]);
 
   const filteredProducts = useMemo(() => {
     const s = productSearch.trim().toLowerCase();

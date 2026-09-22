@@ -18,11 +18,12 @@ if not base_url:
     raise RuntimeError("REACT_APP_BACKEND_URL missing")
 API = base_url.rstrip("/") + "/api"
 
-SECRET = backend_env.get("HANDOFF_JWT_SECRET")
-ISS = backend_env.get("HANDOFF_ISSUER")
-AUD = backend_env.get("HANDOFF_AUDIENCE")
-ADMIN_EMAIL = backend_env.get("ADMIN_EMAIL")
-ADMIN_PASSWORD = backend_env.get("ADMIN_PASSWORD")
+SECRET = os.environ.get("HANDOFF_JWT_SECRET") or backend_env.get("HANDOFF_JWT_SECRET")
+ISS = os.environ.get("HANDOFF_ISSUER") or backend_env.get("HANDOFF_ISSUER")
+AUD = os.environ.get("HANDOFF_AUDIENCE") or backend_env.get("HANDOFF_AUDIENCE")
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL") or backend_env.get("ADMIN_EMAIL")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or backend_env.get("ADMIN_PASSWORD")
+JWT_SECRET = os.environ.get("JWT_SECRET") or backend_env.get("JWT_SECRET")
 
 ALPHA = "tenant-alpha"
 BETA = "tenant-beta"
@@ -81,7 +82,7 @@ def beta_data(H_B):
     p = requests.post(f"{API}/products", json={"name": "TEST_Segredo B", "price": 42, "category": "TEST_C", "active": True}, headers=H_B, timeout=20)
     assert p.status_code == 201, p.text[:300]
     prod = p.json()
-    c = requests.post(f"{API}/customers", json={"name": "TEST_Cliente B", "phone": "1199999999", "notes": ""}, headers=H_B, timeout=20)
+    c = requests.post(f"{API}/customers", json={"name": "TEST_Cliente B", "phone": f"11{uuid.uuid4().int % 10**9:09d}", "notes": ""}, headers=H_B, timeout=20)
     assert c.status_code == 201, c.text[:300]
     cust = c.json()
     o = requests.post(f"{API}/orders", json={"items": [{"product_id": prod["id"], "quantity": 1}]}, headers=H_B, timeout=20)
@@ -174,7 +175,7 @@ class TestCrossTenantIsolation:
             ("put", f"orders/{oid}", {"items": [{"product_id": pid, "quantity": 3}]}),
             ("put", f"products/{pid}", {"name": "HACK", "price": 1, "category": "C", "active": True}),
             ("delete", f"products/{pid}", None),
-            ("put", f"customers/{cid}", {"name": "HACK", "phone": "1", "notes": ""}),
+            ("put", f"customers/{cid}", {"name": "HACK", "phone": "11987654321", "notes": ""}),
         ]
         for method, path, body in checks:
             r = getattr(requests, method)(f"{API}/{path}", json=body, headers=H_A, timeout=20)
@@ -220,7 +221,7 @@ class TestRestaurantIdInjection:
         assert requests.get(f"{API}/products/{pid}", headers=H_B, timeout=20).status_code == 404
 
     def test_body_restaurant_id_ignored_on_customer_and_order(self, H_A, H_B):
-        c = requests.post(f"{API}/customers", json={"name": "TEST_InjC", "phone": "1188", "notes": "", "restaurant_id": BETA},
+        c = requests.post(f"{API}/customers", json={"name": "TEST_InjC", "phone": f"11{uuid.uuid4().int % 10**9:09d}", "notes": "", "restaurant_id": BETA},
                           headers=H_A, timeout=20)
         assert c.status_code == 201
         assert requests.get(f"{API}/customers/{c.json()['id']}", headers=H_B, timeout=20).status_code == 404
@@ -296,8 +297,8 @@ class TestAuthenticatedTenantBinding:
         sess = exchange(sign_handoff(ALPHA, "admin"))
         assert sess.status_code == 200, sess.text[:200]
         token = sess.json()["token"]
-        payload = pyjwt.decode(token, backend_env.get("JWT_SECRET"), algorithms=["HS256"])
-        forged = pyjwt.encode({**payload, "restaurant_id": BETA}, backend_env.get("JWT_SECRET"), algorithm="HS256")
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        forged = pyjwt.encode({**payload, "restaurant_id": BETA}, JWT_SECRET, algorithm="HS256")
         r = requests.get(f"{API}/auth/me", headers={"Authorization": f"Bearer {forged}"}, timeout=20)
         assert r.status_code == 401, f"token com tenant divergente aceito: {r.status_code} {r.text[:200]}"
 
@@ -305,8 +306,8 @@ class TestAuthenticatedTenantBinding:
         sess = exchange(sign_handoff(ALPHA, "admin"))
         assert sess.status_code == 200, sess.text[:200]
         token = sess.json()["token"]
-        payload = pyjwt.decode(token, backend_env.get("JWT_SECRET"), algorithms=["HS256"])
-        forged = pyjwt.encode({**payload, "role": "waiter"}, backend_env.get("JWT_SECRET"), algorithm="HS256")
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        forged = pyjwt.encode({**payload, "role": "waiter"}, JWT_SECRET, algorithm="HS256")
         r = requests.get(f"{API}/auth/me", headers={"Authorization": f"Bearer {forged}"}, timeout=20)
         assert r.status_code == 401, f"token com role divergente aceito: {r.status_code} {r.text[:200]}"
 
@@ -590,8 +591,8 @@ class TestOrdersFilteredByCustomer:
 
     @pytest.fixture(scope="class")
     def two_customers(self, admin_h):
-        c1 = requests.post(f"{API}/customers", json={"name": "TEST_Cliente1", "phone": "111", "notes": ""}, headers=admin_h, timeout=20)
-        c2 = requests.post(f"{API}/customers", json={"name": "TEST_Cliente2", "phone": "222", "notes": ""}, headers=admin_h, timeout=20)
+        c1 = requests.post(f"{API}/customers", json={"name": "TEST_Cliente1", "phone": "11911111111", "notes": ""}, headers=admin_h, timeout=20)
+        c2 = requests.post(f"{API}/customers", json={"name": "TEST_Cliente2", "phone": "11922222222", "notes": ""}, headers=admin_h, timeout=20)
         assert c1.status_code == 201, c1.text[:200]
         assert c2.status_code == 201, c2.text[:200]
         return c1.json(), c2.json()
@@ -910,7 +911,7 @@ class TestOrdersTodayFilters:
         assert order["id"] not in ids
 
     def test_revenue_drilldown_query_sums_to_today_revenue(self, admin_h, product_id):
-        """A consulta que o modal de faturamento usa (status=delivered + today_only) deve
+        """A consulta que o modal de faturamento usa (delivered_today_only) deve
         somar exatamente o mesmo valor de today_revenue do /orders/stats."""
         order = self._new_order(admin_h, product_id)
         requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "in_preparation"}, headers=admin_h, timeout=20)
@@ -918,7 +919,7 @@ class TestOrdersTodayFilters:
         requests.patch(f"{API}/orders/{order['id']}/status", json={"status": "delivered"}, headers=admin_h, timeout=20)
 
         stats = self._stats(admin_h)
-        r = requests.get(f"{API}/orders", params={"status": "delivered", "today_only": "true", "limit": 500}, headers=admin_h, timeout=20)
+        r = requests.get(f"{API}/orders", params={"delivered_today_only": "true", "limit": 500}, headers=admin_h, timeout=20)
         assert r.status_code == 200, r.text[:200]
         total = sum(o["total"] for o in r.json())
         assert abs(total - stats["today_revenue"]) < 0.01

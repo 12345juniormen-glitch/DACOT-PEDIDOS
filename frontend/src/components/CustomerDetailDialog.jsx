@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ClipboardList, Phone } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -20,8 +21,12 @@ import { toast } from "sonner";
  */
 export function CustomerDetailDialog({ open, onOpenChange, customer }) {
   const [orders, setOrders] = useState([]);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+
+  useEffect(() => { setPage(1); }, [customer?.id, open]);
 
   useEffect(() => {
     if (!open || !customer) return;
@@ -30,12 +35,16 @@ export function CustomerDetailDialog({ open, onOpenChange, customer }) {
     // depois que o dialog já mudou de cliente (ou fechou).
     let cancelled = false;
     setOrders([]);
+    setPages(0);
     setError(false);
     setLoading(true);
     api
-      .get("/orders", { params: { customer_id: customer.id } })
+      .get("/orders/history", { params: { customer_id: customer.id, page, page_size: 25 } })
       .then(({ data }) => {
-        if (!cancelled) setOrders(data);
+        if (!cancelled) {
+          setOrders(data.items);
+          setPages(data.pages);
+        }
       })
       .catch((e) => {
         if (!cancelled) {
@@ -49,7 +58,7 @@ export function CustomerDetailDialog({ open, onOpenChange, customer }) {
     return () => {
       cancelled = true;
     };
-  }, [open, customer]);
+  }, [open, customer, page]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -101,6 +110,15 @@ export function CustomerDetailDialog({ open, onOpenChange, customer }) {
                       <div className="text-sm font-semibold text-foreground mt-1.5">{brl(o.total)}</div>
                     </Link>
                   ))}
+                  {pages > 1 && (
+                    <div className="flex items-center justify-between gap-2 pt-2 text-sm text-muted-foreground">
+                      <span>Página {page} de {pages}</span>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Anterior</Button>
+                        <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>Próxima</Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
