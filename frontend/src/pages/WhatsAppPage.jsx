@@ -5,11 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { PageHeader } from "@/components/PageHeader";
 import { api, formatApiError } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/context/AuthContext";
+import { Settings } from "lucide-react";
 import { toast } from "sonner";
 
 const AUTO_MESSAGE_LABELS = {
@@ -186,36 +188,6 @@ export default function WhatsAppPage() {
         <img src={connection.qr_data_url} alt="QR Code para conectar o WhatsApp" className="w-64 h-64 max-w-full mx-auto rounded-md bg-white p-2" />
         <p className="text-xs text-muted-foreground mt-2">O código é temporário e será renovado automaticamente.</p>
       </section>}
-    {canManageConnection && autoMessages && <section className="rounded-lg border bg-card p-4 mb-3">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
-        <div>
-          <h2 className="font-semibold">Mensagens automáticas do pedido</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Personalize os avisos enviados aos clientes que autorizaram atualizações.
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Variáveis disponíveis: {"{{cliente}}"}, {"{{pedido}}"} e {"{{restaurante}}"}.
-          </p>
-        </div>
-        <Button className="shrink-0" onClick={saveAutoMessages} disabled={settingsBusy}>
-          {settingsBusy ? "Salvando…" : "Salvar mensagens"}
-        </Button>
-      </div>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-        {Object.entries(AUTO_MESSAGE_LABELS).map(([status, label]) => <div key={status} className="rounded-md border p-3">
-          <div className="flex items-center justify-between gap-3 mb-2">
-            <label htmlFor={`auto-message-${status}`} className="font-medium text-sm">{label}</label>
-            <Switch id={`auto-message-${status}`} checked={autoMessages[status].enabled}
-              onCheckedChange={(enabled) => updateAutoMessage(status, { enabled })}
-              aria-label={`Ativar mensagem automática: ${label}`} />
-          </div>
-          <Textarea rows={3} value={autoMessages[status].message}
-            onChange={(event) => updateAutoMessage(status, { message: event.target.value })}
-            disabled={!autoMessages[status].enabled} maxLength={1000}
-            aria-label={`Mensagem automática: ${label}`} />
-        </div>)}
-      </div>
-    </section>}
     <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_240px] gap-3">
       <section className="rounded-lg border bg-card p-3 max-h-[70vh] overflow-y-auto">
         <h2 className="font-semibold mb-2">Conversas</h2>
@@ -249,5 +221,49 @@ export default function WhatsAppPage() {
         </> : <p className="text-sm text-muted-foreground">Sem conversa selecionada.</p>}
       </section>
     </div>
+    {canManageConnection && autoMessages && <Accordion type="single" collapsible className="mt-3 rounded-lg border bg-card px-4">
+      <AccordionItem value="auto-messages" className="border-b-0">
+        <AccordionTrigger className="py-4 hover:no-underline">
+          <div className="flex items-start gap-3 min-w-0 pr-3">
+            <Settings className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="min-w-0">
+              <div className="font-semibold text-sm sm:text-base">Configurações de mensagens automáticas</div>
+              <div className="text-xs sm:text-sm font-normal text-muted-foreground mt-0.5">
+                Personalize os avisos enviados quando o pedido muda de status.
+              </div>
+            </div>
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className="pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4 pt-1">
+            <div>
+              <p className="text-sm text-muted-foreground">
+                Os avisos são enviados somente aos clientes que autorizaram atualizações.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Variáveis disponíveis: {"{{cliente}}"}, {"{{pedido}}"} e {"{{restaurante}}"}.
+              </p>
+            </div>
+            <Button className="shrink-0 w-full sm:w-auto" onClick={saveAutoMessages} disabled={settingsBusy}>
+              {settingsBusy ? "Salvando…" : "Salvar mensagens"}
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            {Object.entries(AUTO_MESSAGE_LABELS).map(([status, label]) => <div key={status} className="rounded-md border p-3">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <label htmlFor={`auto-message-${status}`} className="font-medium text-sm">{label}</label>
+                <Switch id={`auto-message-${status}`} checked={autoMessages[status].enabled}
+                  onCheckedChange={(enabled) => updateAutoMessage(status, { enabled })}
+                  aria-label={`Ativar mensagem automática: ${label}`} />
+              </div>
+              <Textarea rows={3} value={autoMessages[status].message}
+                onChange={(event) => updateAutoMessage(status, { message: event.target.value })}
+                disabled={!autoMessages[status].enabled} maxLength={1000}
+                aria-label={`Mensagem automática: ${label}`} />
+            </div>)}
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>}
   </div>;
 }
