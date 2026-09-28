@@ -5,24 +5,26 @@ import { useAuth } from "@/context/AuthContext";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { GlobalSearchDialog } from "@/components/GlobalSearchDialog";
+import { hasAnyPermission, hasPermission } from "@/lib/permissions";
 
 const ROLE_LABEL = { admin: "Administrador", manager: "Gerente", waiter: "Atendimento", kitchen: "Cozinha" };
 
 const NAV_ALL = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard", end: true, roles: ["admin", "manager", "waiter", "kitchen"] },
-  { to: "/pedidos/novo", label: "Novo Pedido", icon: ClipboardList, testid: "nav-new-order", roles: ["admin", "manager", "waiter"] },
-  { to: "/cozinha", label: "Cozinha", icon: ChefHat, testid: "nav-kitchen", roles: ["kitchen"] },
-  { to: "/historico", label: "Histórico", icon: History, testid: "nav-history", roles: ["admin", "manager", "waiter", "kitchen"] },
-  { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle, testid: "nav-whatsapp", roles: ["admin", "manager", "waiter"] },
-  { to: "/produtos", label: "Produtos", icon: Package, testid: "nav-products", roles: ["admin", "manager"] },
-  { to: "/clientes", label: "Clientes", icon: Users, testid: "nav-customers", roles: ["admin", "manager", "waiter"] },
-  { to: "/usuarios", label: "Usuários", icon: ShieldCheck, testid: "nav-users", roles: ["admin"] },
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard", end: true, permission: "dashboard.view" },
+  { to: "/pedidos/novo", label: "Novo Pedido", icon: ClipboardList, testid: "nav-new-order", permission: "orders.create" },
+  { to: "/cozinha", label: "Cozinha", icon: ChefHat, testid: "nav-kitchen", permission: "kds.view" },
+  { to: "/historico", label: "Histórico", icon: History, testid: "nav-history", permission: "history.view" },
+  { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle, testid: "nav-whatsapp", permission: "whatsapp.view" },
+  { to: "/produtos", label: "Produtos", icon: Package, testid: "nav-products", permission: "products.view" },
+  { to: "/clientes", label: "Clientes", icon: Users, testid: "nav-customers", permission: "customers.view" },
+  { to: "/usuarios", label: "Usuários", icon: ShieldCheck, testid: "nav-users", permission: "users.view" },
 ];
 
 export function AppShell({ children }) {
   const { user, logout } = useAuth();
   const nav = useNavigate();
-  const items = NAV_ALL.filter((n) => n.roles.includes(user?.role));
+  const items = NAV_ALL.filter((n) => hasPermission(user, n.permission));
+  const canSearch = hasAnyPermission(user, ["orders.view", "customers.view", "products.view"]);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -35,7 +37,7 @@ export function AppShell({ children }) {
           <div className="w-9 h-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center"><UtensilsCrossed className="w-5 h-5" /></div>
           <div><div className="font-display font-extrabold text-lg leading-none tracking-tight">DACOT</div><div className="text-[11px] text-muted-foreground mt-0.5">Módulo de Pedidos</div></div>
         </div>
-        <div className="px-3 pt-3">
+        {canSearch && <div className="px-3 pt-3">
           <button
             onClick={() => setSearchOpen(true)}
             data-testid="global-search-trigger"
@@ -44,7 +46,7 @@ export function AppShell({ children }) {
             <Search className="w-4 h-4 shrink-0" />
             <span className="truncate">Buscar pedidos, clientes ou produtos...</span>
           </button>
-        </div>
+        </div>}
         <nav className="flex-1 p-3 space-y-1">
           {items.map(({ to, label, icon: Icon, testid, end }) => (
             <NavLink key={to} to={to} end={end} data-testid={testid}
@@ -77,14 +79,14 @@ export function AppShell({ children }) {
         </button>
         <UtensilsCrossed className="w-5 h-5 text-primary" /><span className="font-display font-bold">DACOT</span>
         <div className="ml-auto flex items-center gap-1">
-          <button
+          {canSearch && <button
             onClick={() => setSearchOpen(true)}
             data-testid="mobile-global-search-trigger"
             aria-label="Buscar"
             className="p-1.5 rounded-md text-muted-foreground hover:bg-muted"
           >
             <Search className="w-5 h-5" />
-          </button>
+          </button>}
           <ThemeToggle />
           <button onClick={onLogout} data-testid="logout-button-mobile" className="text-xs text-muted-foreground px-1">Sair</button>
         </div>

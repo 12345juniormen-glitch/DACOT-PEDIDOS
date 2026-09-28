@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -18,39 +19,65 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { Navigate } from "react-router-dom";
+import { hasPermission } from "@/lib/permissions";
 
 const ROLE_LABEL = { admin: "Administrador", manager: "Gerente", waiter: "Atendimento", kitchen: "Cozinha" };
 const ROLES = ["admin", "manager", "waiter", "kitchen"];
-const emptyCreate = { name: "", email: "", temp_password: "", role: "waiter" };
+const emptyCreate = { name: "", email: "", temp_password: "", role: "waiter", permissions: [], require_password_change: false };
 
 export default function UsersPage() {
   useDocumentTitle("Usuários");
   const { user } = useAuth();
+  const canManage = hasPermission(user, "users.manage");
   const [users, setUsers] = useState([]);
+  const [permissionGroups, setPermissionGroups] = useState([]);
+  const [presets, setPresets] = useState({});
   const [openCreate, setOpenCreate] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
   const [openReset, setOpenReset] = useState(false);
   const [target, setTarget] = useState(null);
   const [createForm, setCreateForm] = useState(emptyCreate);
-  const [editForm, setEditForm] = useState({ name: "", role: "waiter", active: true });
+  const [editForm, setEditForm] = useState({ name: "", role: "waiter", active: true, permissions: [] });
   const [tempPw, setTempPw] = useState("");
+  const [requirePasswordChange, setRequirePasswordChange] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
     try {
-      const { data } = await api.get("/users");
-      setUsers(data);
+      const [usersResponse, permissionsResponse] = await Promise.all([
+        api.get("/users"), api.get("/users/permissions"),
+      ]);
+      setUsers(usersResponse.data);
+      setPermissionGroups(permissionsResponse.data.groups);
+      setPresets(permissionsResponse.data.presets);
     } catch (e) { toast.error(formatApiError(e)); }
   };
   useEffect(() => { load(); }, []);
 
-  if (user && user.role !== "admin") return <Navigate to="/" replace />;
+  if (user && !hasPermission(user, "users.view")) return <Navigate to="/" replace />;
+
+  const openCreateDialog = () => {
+    setCreateForm({ ...emptyCreate, permissions: [...(presets.waiter || [])] });
+    setOpenCreate(true);
+  };
+
+  const applyRolePreset = (form, setForm, role) => {
+    setForm({ ...form, role, permissions: [...(presets[role] || [])] });
+  };
+
+  const togglePermission = (form, setForm, permission, checked) => {
+    const current = new Set(form.permissions);
+    if (checked) current.add(permission); else current.delete(permission);
+    setForm({ ...form, permissions: [...current] });
+  };
 
   const submitCreate = async () => {
     setSaving(true);
     try {
       await api.post("/users", createForm);
-      toast.success("Usuário criado. Senha temporária definida — o usuário deverá trocá-la no primeiro login.");
+      toast.success(createForm.require_password_change
+        ? "Usuário criado. A troca de senha será exigida no próximo login."
+        : "Usuário criado.");
       setOpenCreate(false); setCreateForm(emptyCreate); load();
     } catch (e) { toast.error(formatApiError(e)); } finally { setSaving(false); }
   };
@@ -65,9 +92,14 @@ export default function UsersPage() {
   const submitReset = async () => {
     setSaving(true);
     try {
-      await api.post(`/users/${target.id}/reset-password`, { new_temp_password: tempPw });
-      toast.success("Senha redefinida. O usuário deverá trocá-la no próximo login.");
-      setOpenReset(false); setTempPw(""); load();
+      await api.post(`/users/${target.id}/reset-password`, {
+        new_temp_password: tempPw,
+        require_password_change: requirePasswordChange,
+      });
+      toast.success(requirePasswordChange
+        ? "Senha redefinida. A troca será exigida no próximo login."
+        : "Senha redefinida.");
+      setOpenReset(false); setTempPw(""); setRequirePasswordChange(false); load();
     } catch (e) { toast.error(formatApiError(e)); } finally { setSaving(false); }
   };
 
@@ -76,7 +108,7 @@ export default function UsersPage() {
       <PageHeader
         title="Usuários"
         subtitle="Gerencie a equipe do restaurante"
-        action={<Button onClick={() => setOpenCreate(true)} data-testid="new-user-button"><Plus className="w-4 h-4 mr-1.5" /> Novo Usuário</Button>}
+        action={canManage ? <Button onClick={openCreateDialog} data-testid="new-user-button"><Plus className="w-4 h-4 mr-1.5" /> Novo Usuário</Button> : null}
       />
 
       <div className="bg-card border rounded-lg overflow-hidden">
@@ -86,7 +118,7 @@ export default function UsersPage() {
             <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-2.5 font-semibold">Nome</th>
               <th className="px-4 py-2.5 font-semibold">Email</th>
-              <th className="px-4 py-2.5 font-semibold">Papel</th>
+              <th className="px-4 py-2.5 font-semibold">Cargo</th>
               <th className="px-4 py-2.5 font-semibold">Status</th>
               <th className="px-4 py-2.5 font-semibold w-32"></th>
             </tr>
@@ -97,7 +129,7 @@ export default function UsersPage() {
                 <EmptyState
                   icon={Users}
                   title="Nenhum usuário cadastrado"
-                  action={<Button size="sm" onClick={() => setOpenCreate(true)}><Plus className="w-4 h-4 mr-1.5" /> Novo Usuário</Button>}
+                  action={canManage ? <Button size="sm" onClick={openCreateDialog}><Plus className="w-4 h-4 mr-1.5" /> Novo Usuário</Button> : null}
                 />
               </td></tr>
             )}
@@ -110,8 +142,8 @@ export default function UsersPage() {
                 <td className="px-4 py-3 text-foreground">{ROLE_LABEL[u.role]}</td>
                 <td className="px-4 py-3"><ActivePill active={u.active} /></td>
                 <td className="px-4 py-3">
-                  <button onClick={() => { setTarget(u); setEditForm({ name: u.name, role: u.role, active: u.active }); setOpenEdit(true); }} data-testid={`edit-user-${u.id}`} className="p-1.5 rounded hover:bg-muted text-muted-foreground" title="Editar"><Pencil className="w-4 h-4" /></button>
-                  <button onClick={() => { setTarget(u); setTempPw(""); setOpenReset(true); }} data-testid={`reset-user-${u.id}`} className="p-1.5 rounded hover:bg-muted text-muted-foreground ml-1" title="Redefinir senha"><KeyRound className="w-4 h-4" /></button>
+                  {canManage && <><button onClick={() => { setTarget(u); setEditForm({ name: u.name, role: u.role, active: u.active, permissions: [...u.permissions] }); setOpenEdit(true); }} data-testid={`edit-user-${u.id}`} className="p-1.5 rounded hover:bg-muted text-muted-foreground" title="Editar"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => { setTarget(u); setTempPw(""); setRequirePasswordChange(false); setOpenReset(true); }} data-testid={`reset-user-${u.id}`} className="p-1.5 rounded hover:bg-muted text-muted-foreground ml-1" title="Redefinir senha"><KeyRound className="w-4 h-4" /></button></>}
                 </td>
               </tr>
             ))}
@@ -121,19 +153,26 @@ export default function UsersPage() {
       </div>
 
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Novo Usuário</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Nome</Label><Input value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} data-testid="user-name-input" /></div>
             <div><Label>Email</Label><Input type="email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} data-testid="user-email-input" /></div>
-            <div><Label>Senha temporária</Label><Input type="text" value={createForm.temp_password} onChange={(e) => setCreateForm({ ...createForm, temp_password: e.target.value })} placeholder="Mínimo 6 caracteres" data-testid="user-password-input" /></div>
-            <div><Label>Papel</Label>
-              <Select value={createForm.role} onValueChange={(v) => setCreateForm({ ...createForm, role: v })}>
+            <div><Label>Senha</Label><Input type="text" value={createForm.temp_password} onChange={(e) => setCreateForm({ ...createForm, temp_password: e.target.value })} placeholder="Mínimo 6 caracteres" data-testid="user-password-input" /></div>
+            <div><Label>Cargo</Label>
+              <Select value={createForm.role} onValueChange={(v) => applyRolePreset(createForm, setCreateForm, v)}>
                 <SelectTrigger className="mt-1.5" data-testid="user-role-select"><SelectValue /></SelectTrigger>
                 <SelectContent>{ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABEL[r]}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <p className="text-xs text-muted-foreground">O usuário será obrigado a trocar a senha no primeiro login.</p>
+            <PermissionsEditor groups={permissionGroups} permissions={createForm.permissions}
+              onChange={(permission, checked) => togglePermission(createForm, setCreateForm, permission, checked)} />
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox checked={createForm.require_password_change}
+                data-testid="require-password-change-create"
+                onCheckedChange={(checked) => setCreateForm({ ...createForm, require_password_change: checked === true })} />
+              Exigir troca de senha no próximo login
+            </label>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenCreate(false)}>Cancelar</Button>
@@ -143,16 +182,18 @@ export default function UsersPage() {
       </Dialog>
 
       <Dialog open={openEdit} onOpenChange={setOpenEdit}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Editar Usuário</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Nome</Label><Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></div>
-            <div><Label>Papel</Label>
-              <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v })}>
+            <div><Label>Cargo</Label>
+              <Select value={editForm.role} onValueChange={(v) => applyRolePreset(editForm, setEditForm, v)}>
                 <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
                 <SelectContent>{ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABEL[r]}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            <PermissionsEditor groups={permissionGroups} permissions={editForm.permissions}
+              onChange={(permission, checked) => togglePermission(editForm, setEditForm, permission, checked)} />
             <div className="flex items-center justify-between pt-2 border-t"><Label>Ativo</Label><Switch checked={editForm.active} onCheckedChange={(v) => setEditForm({ ...editForm, active: v })} /></div>
           </div>
           <DialogFooter>
@@ -166,8 +207,14 @@ export default function UsersPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>Redefinir senha</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">Uma senha temporária será definida para <b>{target?.name}</b>. O usuário deverá trocá-la no próximo login.</p>
-            <div><Label>Nova senha temporária</Label><Input type="text" value={tempPw} onChange={(e) => setTempPw(e.target.value)} placeholder="Mínimo 6 caracteres" data-testid="reset-password-input" /></div>
+            <p className="text-sm text-muted-foreground">Defina uma nova senha para <b>{target?.name}</b>.</p>
+            <div><Label>Nova senha</Label><Input type="text" value={tempPw} onChange={(e) => setTempPw(e.target.value)} placeholder="Mínimo 6 caracteres" data-testid="reset-password-input" /></div>
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox checked={requirePasswordChange}
+                data-testid="require-password-change-reset"
+                onCheckedChange={(checked) => setRequirePasswordChange(checked === true)} />
+              Exigir troca de senha no próximo login
+            </label>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenReset(false)}>Cancelar</Button>
@@ -177,4 +224,23 @@ export default function UsersPage() {
       </Dialog>
     </div>
   );
+}
+
+function PermissionsEditor({ groups, permissions, onChange }) {
+  const selected = new Set(permissions);
+  return <div className="space-y-2 pt-2 border-t">
+    <Label>Permissões</Label>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+      {groups.map((group) => <div key={group.key} className="rounded-md border p-3">
+        <div className="text-sm font-semibold mb-2">{group.label}</div>
+        <div className="space-y-2">
+          {group.permissions.map((permission) => <label key={permission.key} className="flex items-center gap-2 text-sm">
+            <Checkbox checked={selected.has(permission.key)}
+              onCheckedChange={(checked) => onChange(permission.key, checked === true)} />
+            {permission.label}
+          </label>)}
+        </div>
+      </div>)}
+    </div>
+  </div>;
 }

@@ -40,13 +40,14 @@ def test_v1_status_contract_has_only_adjacent_reversals():
 
 
 def test_revenue_uses_delivery_day_and_matches_drilldown():
-    tenant_id = f"tenant-p0-revenue-{uuid.uuid4().hex[:8]}"
+    tenant_id = uuid.uuid4().hex[:24]
     now = int(time.time())
     handoff = jwt.encode({
         "sub": f"tenant_user:{uuid.uuid4().hex}", "restaurant_id": tenant_id,
         "role": "admin", "module": "orders", "iss": os.environ["HANDOFF_ISSUER"],
         "aud": os.environ["HANDOFF_AUDIENCE"], "iat": now, "nbf": now - 5,
         "exp": now + 60, "jti": uuid.uuid4().hex, "handoff_version": 1,
+        "hub_access": {"user": 1, "tenant": 1, "module": 1},
     }, os.environ["HANDOFF_JWT_SECRET"], algorithm="HS256")
     response = requests.post(f"{API}/session/exchange", json={"handoff": handoff}, timeout=20)
     assert response.status_code == 200, response.text[:200]
@@ -133,3 +134,106 @@ def test_status_write_rejects_concurrent_change(monkeypatch):
             Tenant({"id": "user-1", "restaurant_id": "restaurant-1", "role": "kitchen"}),
         ))
     assert error.value.status_code == 409
+
+
+def test_custom_permissions_and_optional_password_change():
+    tenant_id = uuid.uuid4().hex[:24]
+    now = int(time.time())
+    handoff = jwt.encode({
+        "sub": f"tenant_user:{uuid.uuid4().hex}", "restaurant_id": tenant_id,
+        "role": "admin", "module": "orders", "iss": os.environ["HANDOFF_ISSUER"],
+        "aud": os.environ["HANDOFF_AUDIENCE"], "iat": now, "nbf": now - 5,
+        "exp": now + 60, "jti": uuid.uuid4().hex, "handoff_version": 1,
+        "hub_access": {"user": 1, "tenant": 1, "module": 1},
+    }, os.environ["HANDOFF_JWT_SECRET"], algorithm="HS256")
+    session = requests.post(f"{API}/session/exchange", json={"handoff": handoff}, timeout=20)
+    assert session.status_code == 200, session.text[:200]
+    admin = session.json()
+    admin_headers = {"Authorization": f"Bearer {admin['token']}"}
+
+    catalog = requests.get(f"{API}/users/permissions", headers=admin_headers, timeout=20)
+    assert catalog.status_code == 200, catalog.text[:200]
+    assert set(catalog.json()["presets"]) == {"admin", "manager", "waiter", "kitchen"}
+    assert "dashboard.metrics" in catalog.json()["presets"]["manager"]
+    assert "dashboard.metrics" not in catalog.json()["presets"]["waiter"]
+    assert "users.manage" in admin["user"]["permissions"]
+
+    # A custom permission list overrides the role preset and is read from the DB
+    # on every request, rather than being copied into the access token.
+    custom_email = f"custom-{uuid.uuid4().hex}@example.com"
+    custom_password = "custom-password-1"
+    created = requests.post(f"{API}/users", headers=admin_headers, timeout=20, json={
+        "name": "Custom permission user", "email": custom_email,
+        "temp_password": custom_password, "role": "kitchen",
+        "permissions": ["products.view"],
+    })
+    assert created.status_code == 201, created.text[:200]
+    assert created.json()["must_change_password"] is False
+    login = requests.post(f"{API}/auth/login", timeout=20, json={
+        "email": custom_email, "password": custom_password,
+    })
+    assert login.status_code == 200, login.text[:200]
+    custom_headers = {"Authorization": f"Bearer {login.json()['token']}"}
+    assert requests.get(f"{API}/products", headers=custom_headers, timeout=20).status_code == 200
+    assert requests.get(f"{API}/orders", headers=custom_headers, timeout=20).status_code == 403
+
+    updated = requests.put(
+        f"{API}/users/{created.json()['id']}", headers=admin_headers, timeout=20,
+        json={"name": "Custom permission user", "role": "kitchen", "active": True,
+              "permissions": ["orders.view"]},
+    )
+    assert updated.status_code == 200, updated.text[:200]
+    assert requests.get(f"{API}/products", headers=custom_headers, timeout=20).status_code == 403
+    assert requests.get(f"{API}/orders", headers=custom_headers, timeout=20).status_code == 200
+
+    reset_default = requests.post(
+        f"{API}/users/{created.json()['id']}/reset-password", headers=admin_headers, timeout=20,
+        json={"new_temp_password": "reset-password-1"},
+    )
+    assert reset_default.status_code == 200, reset_default.text[:200]
+    assert reset_default.json()["must_change_password"] is False
+    reset_forced = requests.post(
+        f"{API}/users/{created.json()['id']}/reset-password", headers=admin_headers, timeout=20,
+        json={"new_temp_password": "reset-password-2", "require_password_change": True},
+    )
+    assert reset_forced.status_code == 200, reset_forced.text[:200]
+    assert reset_forced.json()["must_change_password"] is True
+    assert requests.get(f"{API}/orders", headers=custom_headers, timeout=20).status_code == 403
+    reset_unlocked = requests.post(
+        f"{API}/users/{created.json()['id']}/reset-password", headers=admin_headers, timeout=20,
+        json={"new_temp_password": "reset-password-3"},
+    )
+    assert reset_unlocked.status_code == 200, reset_unlocked.text[:200]
+    assert requests.get(f"{API}/orders", headers=custom_headers, timeout=20).status_code == 200
+
+    # Omitting permissions preserves backward compatibility through the role preset.
+    forced_email = f"forced-{uuid.uuid4().hex}@example.com"
+    forced_password = "temporary-password-1"
+    forced = requests.post(f"{API}/users", headers=admin_headers, timeout=20, json={
+        "name": "Preset user", "email": forced_email, "temp_password": forced_password,
+        "role": "waiter", "require_password_change": True,
+    })
+    assert forced.status_code == 201, forced.text[:200]
+    assert forced.json()["must_change_password"] is True
+    assert "orders.create" in forced.json()["permissions"]
+    forced_login = requests.post(f"{API}/auth/login", timeout=20, json={
+        "email": forced_email, "password": forced_password,
+    })
+    assert forced_login.status_code == 200, forced_login.text[:200]
+    forced_headers = {"Authorization": f"Bearer {forced_login.json()['token']}"}
+    locked = requests.get(f"{API}/orders", headers=forced_headers, timeout=20)
+    assert locked.status_code == 403
+    assert locked.json()["detail"] == "Troca de senha obrigatória"
+    changed = requests.post(f"{API}/auth/change-password", headers=forced_headers, timeout=20, json={
+        "current_password": forced_password, "new_password": "permanent-password-1",
+    })
+    assert changed.status_code == 200, changed.text[:200]
+    assert requests.get(f"{API}/orders", headers=forced_headers, timeout=20).status_code == 200
+
+    # The sole users.manage holder cannot remove that capability from itself.
+    protected = requests.put(
+        f"{API}/users/{admin['user']['id']}", headers=admin_headers, timeout=20,
+        json={"name": admin["user"]["name"], "role": "admin", "active": True,
+              "permissions": ["users.view"]},
+    )
+    assert protected.status_code == 409

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from core.db import get_db
-from core.deps import Tenant, get_tenant, require_roles
+from core.deps import Tenant, require_permissions
 from core.money import cents_to_reais, reais_to_cents
 
 
@@ -48,7 +48,7 @@ router = APIRouter(prefix="/products", tags=["products"])
 
 @router.get("", response_model=list[ProductOut])
 async def list_products(
-    tenant: Tenant = Depends(get_tenant),
+    tenant: Tenant = Depends(require_permissions("products.view")),
     active_only: bool = Query(False, description="Se true, retorna apenas produtos ativos"),
     category: Optional[str] = None,
     search: str = Query("", max_length=120),
@@ -66,7 +66,7 @@ async def list_products(
 
 
 @router.post("", response_model=ProductOut, status_code=201)
-async def create_product(payload: ProductInput, tenant: Tenant = Depends(require_roles("admin", "manager"))):
+async def create_product(payload: ProductInput, tenant: Tenant = Depends(require_permissions("products.manage"))):
     db = get_db()
     now = datetime.now(timezone.utc).isoformat()
     doc = {
@@ -85,14 +85,14 @@ async def create_product(payload: ProductInput, tenant: Tenant = Depends(require
 
 
 @router.get("/categories", response_model=list[str])
-async def list_categories(tenant: Tenant = Depends(get_tenant)):
+async def list_categories(tenant: Tenant = Depends(require_permissions("products.view"))):
     db = get_db()
     cats = await db.products.distinct("category", {"restaurant_id": tenant.restaurant_id})
     return sorted([c for c in cats if c])
 
 
 @router.get("/{product_id}", response_model=ProductOut)
-async def get_product(product_id: str, tenant: Tenant = Depends(get_tenant)):
+async def get_product(product_id: str, tenant: Tenant = Depends(require_permissions("products.view"))):
     db = get_db()
     doc = await db.products.find_one(
         {"id": product_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0}
@@ -103,7 +103,7 @@ async def get_product(product_id: str, tenant: Tenant = Depends(get_tenant)):
 
 
 @router.put("/{product_id}", response_model=ProductOut)
-async def update_product(product_id: str, payload: ProductInput, tenant: Tenant = Depends(require_roles("admin", "manager"))):
+async def update_product(product_id: str, payload: ProductInput, tenant: Tenant = Depends(require_permissions("products.manage"))):
     db = get_db()
     now = datetime.now(timezone.utc).isoformat()
     updates = {
@@ -126,7 +126,7 @@ async def update_product(product_id: str, payload: ProductInput, tenant: Tenant 
 
 
 @router.delete("/{product_id}", status_code=204)
-async def deactivate_product(product_id: str, tenant: Tenant = Depends(require_roles("admin", "manager"))):
+async def deactivate_product(product_id: str, tenant: Tenant = Depends(require_permissions("products.manage"))):
     """Soft delete: marca como inativo (não some do histórico)."""
     db = get_db()
     result = await db.products.update_one(

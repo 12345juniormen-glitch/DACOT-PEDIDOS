@@ -21,11 +21,15 @@ import { api, formatApiError } from "@/lib/api";
 import { brl } from "@/lib/format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
+import { hasPermission } from "@/lib/permissions";
 
 const empty = { name: "", description: "", price: "", category: "Geral", active: true };
 
 export default function ProductsPage() {
   useDocumentTitle("Produtos");
+  const { user } = useAuth();
+  const canManage = hasPermission(user, "products.manage");
   const [products, setProducts] = useState([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -55,12 +59,12 @@ export default function ProductsPage() {
     const productId = searchParams.get("product");
     if (!productId) return;
     const p = products.find((x) => x.id === productId);
-    if (p) openEdit(p);
+    if (p && canManage) openEdit(p);
     const next = new URLSearchParams(searchParams);
     next.delete("product");
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- openEdit é recriada a cada render; não precisa disparar o efeito de novo
-  }, [products, searchParams, setSearchParams]);
+  }, [products, searchParams, setSearchParams, canManage]);
 
   const openCreate = () => {
     setEditing(null);
@@ -101,11 +105,11 @@ export default function ProductsPage() {
       <PageHeader
         title="Produtos"
         subtitle="Cadastro do cardápio usado nos pedidos"
-        action={
+        action={canManage ?
           <Button onClick={openCreate} data-testid="new-product-button">
             <Plus className="w-4 h-4 mr-1.5" /> Novo Produto
           </Button>
-        }
+        : null}
       />
 
       <div className="bg-card border rounded-lg overflow-hidden">
@@ -127,7 +131,7 @@ export default function ProductsPage() {
                   icon={Package}
                   title="Nenhum produto cadastrado"
                   description="Cadastre o primeiro produto para começar a montar pedidos."
-                  action={<Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 mr-1.5" /> Novo Produto</Button>}
+                  action={canManage ? <Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 mr-1.5" /> Novo Produto</Button> : null}
                 />
               </td></tr>
             )}
@@ -141,9 +145,9 @@ export default function ProductsPage() {
                 <td className="px-4 py-3 text-right font-medium">{brl(p.price)}</td>
                 <td className="px-4 py-3"><ActivePill active={p.active} /></td>
                 <td className="px-4 py-3">
-                  <button onClick={() => openEdit(p)} data-testid={`edit-product-${p.id}`} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                  {canManage && <button onClick={() => openEdit(p)} data-testid={`edit-product-${p.id}`} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
                     <Pencil className="w-4 h-4" />
-                  </button>
+                  </button>}
                 </td>
               </tr>
             ))}

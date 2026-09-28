@@ -10,9 +10,13 @@ import { EmptyState } from "@/components/EmptyState";
 import { api, formatApiError } from "@/lib/api";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
+import { hasPermission } from "@/lib/permissions";
 
 export default function CustomersPage() {
   useDocumentTitle("Clientes");
+  const { user } = useAuth();
+  const canManage = hasPermission(user, "customers.manage");
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -53,14 +57,14 @@ export default function CustomersPage() {
       <PageHeader
         title="Clientes"
         subtitle="Cadastro para vincular aos pedidos"
-        action={<div className="flex gap-2">
+        action={canManage ? <div className="flex gap-2">
           <Button variant="outline" onClick={() => setImportOpen(true)} data-testid="import-customers-button">
             <Download className="w-4 h-4 mr-1.5" /> Importar contatos
           </Button>
           <Button onClick={openCreate} data-testid="new-customer-button">
             <Plus className="w-4 h-4 mr-1.5" /> Novo Cliente
           </Button>
-        </div>}
+        </div> : null}
       />
 
       <div className="bg-card border rounded-lg overflow-hidden">
@@ -81,7 +85,7 @@ export default function CustomersPage() {
                   icon={Users}
                   title="Nenhum cliente cadastrado"
                   description="Clientes cadastrados aqui ficam disponíveis ao criar um pedido."
-                  action={<Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 mr-1.5" /> Novo Cliente</Button>}
+                  action={canManage ? <Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 mr-1.5" /> Novo Cliente</Button> : null}
                 />
               </td></tr>
             )}
@@ -99,9 +103,9 @@ export default function CustomersPage() {
                 <td className="px-4 py-3 text-muted-foreground">{c.phone || "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground line-clamp-1">{c.notes || "—"}</td>
                 <td className="px-4 py-3">
-                  <button onClick={() => openEdit(c)} data-testid={`edit-customer-${c.id}`} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                  {canManage && <button onClick={() => openEdit(c)} data-testid={`edit-customer-${c.id}`} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
                     <Pencil className="w-4 h-4" />
-                  </button>
+                  </button>}
                 </td>
               </tr>
             ))}

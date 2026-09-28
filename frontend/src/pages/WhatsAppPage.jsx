@@ -12,6 +12,7 @@ import { formatDateTime } from "@/lib/format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/context/AuthContext";
 import { Settings } from "lucide-react";
+import { hasPermission } from "@/lib/permissions";
 import { toast } from "sonner";
 
 const AUTO_MESSAGE_LABELS = {
@@ -37,16 +38,18 @@ export default function WhatsAppPage() {
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [connection, setConnection] = useState({ state: "loading", connected: false, qr_data_url: null });
   const selectedId = selected?.id;
-  const canManageConnection = ["admin", "manager"].includes(user?.role);
+  const canConfigure = hasPermission(user, "whatsapp.configure");
+  const canOperate = hasPermission(user, "whatsapp.operate");
+  const canCreateOrder = hasPermission(user, "orders.create");
 
   useEffect(() => {
-    if (!canManageConnection) return;
+    if (!canConfigure) return;
     let active = true;
     api.get("/whatsapp/auto-messages")
       .then(({ data }) => { if (active) setAutoMessages(data); })
       .catch((e) => { if (active) toast.error(formatApiError(e)); });
     return () => { active = false; };
-  }, [canManageConnection]);
+  }, [canConfigure]);
 
   const loadConnection = useCallback(async (quiet = true) => {
     try {
@@ -176,14 +179,14 @@ export default function WhatsAppPage() {
             : connection.state === "waiting_qr" ? "Abra Aparelhos conectados no WhatsApp e leia o código abaixo." : "Conecte um WhatsApp para receber e responder mensagens."}
         </p>
       </div>
-      {canManageConnection && <div className="flex gap-2 shrink-0">
+      {canConfigure && <div className="flex gap-2 shrink-0">
         {!connection.connected && connection.state !== "waiting_qr" && connection.state !== "connecting" &&
           <Button onClick={connect} disabled={busy}>Conectar WhatsApp</Button>}
         {(connection.connected || connection.state === "waiting_qr" || connection.state === "connecting" || connection.state === "reconnecting") &&
           <Button variant="outline" onClick={disconnect} disabled={busy}>Desconectar</Button>}
       </div>}
     </section>
-    {canManageConnection && connection.state === "waiting_qr" && connection.qr_data_url &&
+    {canConfigure && connection.state === "waiting_qr" && connection.qr_data_url &&
       <section className="rounded-lg border bg-card p-4 mb-3 text-center">
         <img src={connection.qr_data_url} alt="QR Code para conectar o WhatsApp" className="w-64 h-64 max-w-full mx-auto rounded-md bg-white p-2" />
         <p className="text-xs text-muted-foreground mt-2">O código é temporário e será renovado automaticamente.</p>
@@ -209,19 +212,19 @@ export default function WhatsAppPage() {
               <div className="text-[11px] text-muted-foreground mt-1">{formatDateTime(message.created_at)} · {message.status}</div>
             </div>)}
           </div>
-          <div className="flex gap-2 mt-3"><Input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} placeholder={connection.connected ? "Responder…" : "Conecte o WhatsApp para responder"} disabled={!connection.connected || busy} /><Button disabled={!connection.connected || busy || !draft.trim()} onClick={send}>Enviar</Button></div>
+          {canOperate && <div className="flex gap-2 mt-3"><Input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} placeholder={connection.connected ? "Responder…" : "Conecte o WhatsApp para responder"} disabled={!connection.connected || busy} /><Button disabled={!connection.connected || busy || !draft.trim()} onClick={send}>Enviar</Button></div>}
         </>}
       </section>
       <section className="rounded-lg border bg-card p-3 sm:p-4 h-fit">
         <h2 className="font-semibold mb-2">Cliente</h2>
         {selected ? <><p className="text-sm break-words">{selected.profile_name || selected.phone}<br /><span className="text-muted-foreground">{selected.phone}</span></p>
-          <label className="flex items-start gap-2 text-xs mt-4 text-muted-foreground"><input type="checkbox" className="mt-0.5" checked={!!selected.order_updates_opt_in} onChange={(e) => setConsent(e.target.checked)} /><span>Cliente autorizou receber atualizações do pedido por WhatsApp</span></label>
-          {selected.customer_id ? <Button className="w-full mt-4" onClick={() => navigate(`/pedidos/novo?customer=${encodeURIComponent(selected.customer_id)}`)}>Criar pedido</Button>
-            : <Button className="w-full mt-4" variant="outline" disabled={busy} onClick={createCustomer}>Criar/vincular cliente</Button>}
+          {canOperate && <label className="flex items-start gap-2 text-xs mt-4 text-muted-foreground"><input type="checkbox" className="mt-0.5" checked={!!selected.order_updates_opt_in} onChange={(e) => setConsent(e.target.checked)} /><span>Cliente autorizou receber atualizações do pedido por WhatsApp</span></label>}
+          {canOperate && (selected.customer_id ? canCreateOrder && <Button className="w-full mt-4" onClick={() => navigate(`/pedidos/novo?customer=${encodeURIComponent(selected.customer_id)}`)}>Criar pedido</Button>
+            : <Button className="w-full mt-4" variant="outline" disabled={busy} onClick={createCustomer}>Criar/vincular cliente</Button>)}
         </> : <p className="text-sm text-muted-foreground">Sem conversa selecionada.</p>}
       </section>
     </div>
-    {canManageConnection && autoMessages && <Accordion type="single" collapsible className="mt-3 rounded-lg border bg-card px-4">
+    {canConfigure && autoMessages && <Accordion type="single" collapsible className="mt-3 rounded-lg border bg-card px-4">
       <AccordionItem value="auto-messages" className="border-b-0">
         <AccordionTrigger className="py-4 hover:no-underline">
           <div className="flex items-start gap-3 min-w-0 pr-3">

@@ -5,6 +5,8 @@ import { api, formatApiError } from "@/lib/api";
 import { shouldBeepForNewOrders } from "@/lib/kitchenAlerts";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
+import { hasPermission } from "@/lib/permissions";
 
 // KDS — visão exclusiva para cozinha.
 // Mostra pedidos em `new`, `in_preparation` e `ready`.
@@ -35,6 +37,8 @@ function elapsedTierClass(elapsedMs) {
 
 export default function KitchenPage() {
   useDocumentTitle("Cozinha");
+  const { user } = useAuth();
+  const canChangeStatus = hasPermission(user, "kds.status");
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null); // order id currently being updated
@@ -183,6 +187,7 @@ export default function KitchenPage() {
             )}
             {grouped.new.map((o) => (
               <KitchenCard key={o.id} order={o} now={now}>
+                {canChangeStatus &&
                 <Button
                   size="lg"
                   className="w-full text-base h-12"
@@ -191,7 +196,7 @@ export default function KitchenPage() {
                   data-testid={`start-prep-${o.order_number}`}
                 >
                   <Play className="w-5 h-5 mr-2" /> Iniciar preparo
-                </Button>
+                </Button>}
               </KitchenCard>
             ))}
           </div>
@@ -211,7 +216,7 @@ export default function KitchenPage() {
             )}
             {grouped.in_preparation.map((o) => (
               <KitchenCard key={o.id} order={o} now={now} accent="orange">
-                <div className="flex gap-2">
+                {canChangeStatus && <div className="flex gap-2">
                   <Button
                     variant="outline"
                     size="lg"
@@ -231,7 +236,7 @@ export default function KitchenPage() {
                   >
                     <Check className="w-5 h-5 mr-2" /> Marcar como pronto
                   </Button>
-                </div>
+                </div>}
               </KitchenCard>
             ))}
           </div>
@@ -251,7 +256,7 @@ export default function KitchenPage() {
             )}
             {grouped.ready.map((o) => (
               <KitchenCard key={o.id} order={o} now={now} accent="emerald">
-                <Button
+                {canChangeStatus && <Button
                   variant="outline"
                   size="lg"
                   className="w-full text-sm h-12"
@@ -260,7 +265,7 @@ export default function KitchenPage() {
                   data-testid={`revert-to-in-preparation-${o.order_number}`}
                 >
                   <RotateCcw className="w-4 h-4 mr-1.5" /> Voltar para Em preparo
-                </Button>
+                </Button>}
               </KitchenCard>
             ))}
           </div>

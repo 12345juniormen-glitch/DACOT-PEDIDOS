@@ -21,6 +21,7 @@ from pymongo.errors import DuplicateKeyError
 from core.db import get_db
 from core.security import create_access_token
 from core.hub_access import check_hub_access, validate_context
+from core.permissions import effective_permissions
 
 
 ALLOWED_MODULE_IDS = {"orders", "pedidos"}
@@ -37,6 +38,7 @@ class ExchangeUser(BaseModel):
     email: str
     name: str
     role: str
+    permissions: list[str] = Field(default_factory=list)
     restaurant_id: str
     restaurant_slug: str | None = None
     must_change_password: bool = False
@@ -252,6 +254,7 @@ async def exchange(payload: ExchangeInput):
         email=user["email"],
         name=user["name"],
         role=user["role"],
+        permissions=effective_permissions(user),
         restaurant_id=user["restaurant_id"],
         restaurant_slug=str(handoff_claims.get("restaurant_slug", "")).strip() or None,
         must_change_password=bool(user.get("must_change_password", False)),

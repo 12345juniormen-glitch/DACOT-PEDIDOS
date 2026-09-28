@@ -25,8 +25,8 @@ ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL") or backend_env.get("ADMIN_EMAIL")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or backend_env.get("ADMIN_PASSWORD")
 JWT_SECRET = os.environ.get("JWT_SECRET") or backend_env.get("JWT_SECRET")
 
-ALPHA = "tenant-alpha"
-BETA = "tenant-beta"
+ALPHA = "a" * 24
+BETA = "b" * 24
 
 
 def sign_handoff(restaurant_id, role="admin", sub_id=None, secret=None, **over):
@@ -43,6 +43,7 @@ def sign_handoff(restaurant_id, role="admin", sub_id=None, secret=None, **over):
         "exp": now + 60,
         "jti": uuid.uuid4().hex,
         "handoff_version": 1,
+        "hub_access": {"user": 1, "tenant": 1, "module": 1},
     }
     claims.update(over)
     return pyjwt.encode(claims, secret or SECRET, algorithm="HS256")
@@ -355,7 +356,7 @@ class TestOrderNumberConcurrency:
     order_number and one would blow up with a raw 500 on the unique index)."""
 
     def test_concurrent_order_creation_gets_unique_sequential_numbers(self):
-        tenant_id = f"tenant-race-{uuid.uuid4().hex[:8]}"
+        tenant_id = uuid.uuid4().hex[:24]
         r = exchange(sign_handoff(tenant_id, "admin"))
         assert r.status_code == 200, r.text[:300]
         headers = {"Authorization": f"Bearer {r.json()['token']}"}
@@ -396,7 +397,7 @@ class TestKitchenStatusRollback:
 
     @pytest.fixture(scope="class")
     def tenant_id(self):
-        return f"tenant-kitchen-{uuid.uuid4().hex[:8]}"
+        return uuid.uuid4().hex[:24]
 
     @pytest.fixture(scope="class")
     def admin_h(self, tenant_id):
@@ -496,7 +497,7 @@ class TestOrderStatusTimestampForElapsedIndicator:
 
     @pytest.fixture(scope="class")
     def tenant_id(self):
-        return f"tenant-timer-{uuid.uuid4().hex[:8]}"
+        return uuid.uuid4().hex[:24]
 
     @pytest.fixture(scope="class")
     def admin_h(self, tenant_id):
@@ -574,7 +575,7 @@ class TestOrdersFilteredByCustomer:
 
     @pytest.fixture(scope="class")
     def tenant_id(self):
-        return f"tenant-custhist-{uuid.uuid4().hex[:8]}"
+        return uuid.uuid4().hex[:24]
 
     @pytest.fixture(scope="class")
     def admin_h(self, tenant_id):
@@ -641,7 +642,7 @@ class TestProductsSearch:
 
     @pytest.fixture(scope="class")
     def tenant_id(self):
-        return f"tenant-prodsearch-{uuid.uuid4().hex[:8]}"
+        return uuid.uuid4().hex[:24]
 
     @pytest.fixture(scope="class")
     def admin_h(self, tenant_id):
@@ -684,7 +685,7 @@ class TestOrderDeliveredAtExposure:
 
     @pytest.fixture(scope="class")
     def tenant_id(self):
-        return f"tenant-timeline-{uuid.uuid4().hex[:8]}"
+        return uuid.uuid4().hex[:24]
 
     @pytest.fixture(scope="class")
     def admin_h(self, tenant_id):
@@ -745,7 +746,7 @@ class TestOrdersStatsTodayIndicators:
 
     @pytest.fixture(scope="class")
     def tenant_id(self):
-        return f"tenant-todaystats-{uuid.uuid4().hex[:8]}"
+        return uuid.uuid4().hex[:24]
 
     @pytest.fixture(scope="class")
     def admin_h(self, tenant_id):
@@ -851,7 +852,7 @@ class TestOrdersTodayFilters:
 
     @pytest.fixture(scope="class")
     def tenant_id(self):
-        return f"tenant-todayfilters-{uuid.uuid4().hex[:8]}"
+        return uuid.uuid4().hex[:24]
 
     @pytest.fixture(scope="class")
     def admin_h(self, tenant_id):

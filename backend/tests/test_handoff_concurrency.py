@@ -34,6 +34,7 @@ def _handoff(restaurant_id, hub_user_id):
         "exp": now + 60,
         "jti": uuid.uuid4().hex,
         "handoff_version": 1,
+        "hub_access": {"user": 1, "tenant": 1, "module": 1},
     }, os.environ["HANDOFF_JWT_SECRET"], algorithm="HS256")
 
 
@@ -49,7 +50,7 @@ def _parallel_exchange(tokens):
 
 
 def test_concurrent_first_handoffs_create_one_restaurant():
-    tenant_id = f"tenant-handoff-race-{uuid.uuid4().hex}"
+    tenant_id = uuid.uuid4().hex[:24]
     tokens = [_handoff(tenant_id, uuid.uuid4().hex) for _ in range(12)]
     responses = _parallel_exchange(tokens)
     assert [r.status_code for r in responses] == [200] * len(tokens)
@@ -61,7 +62,7 @@ def test_concurrent_first_handoffs_create_one_restaurant():
 
 
 def test_concurrent_handoffs_for_one_user_create_one_user():
-    tenant_id = f"tenant-handoff-user-race-{uuid.uuid4().hex}"
+    tenant_id = uuid.uuid4().hex[:24]
     hub_user_id = uuid.uuid4().hex
     tokens = [_handoff(tenant_id, hub_user_id) for _ in range(12)]
     responses = _parallel_exchange(tokens)

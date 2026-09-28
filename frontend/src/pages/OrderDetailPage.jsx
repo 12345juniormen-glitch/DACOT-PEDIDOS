@@ -20,6 +20,7 @@ import { brl, formatDateTime, STATUS_LABEL, STATUS_ORDER } from "@/lib/format";
 import { buildAuditTimelineEvents, computeTotalDurationMs, computeUntilCurrentDurationMs, formatDurationMinutes } from "@/lib/orderTimeline";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/context/AuthContext";
+import { hasPermission } from "@/lib/permissions";
 import { toast } from "sonner";
 
 // Mirrors backend ALLOWED_TRANSITIONS (backend/modules/orders/routes.py).
@@ -104,10 +105,19 @@ export default function OrderDetailPage() {
 
   if (!order) return <div className="p-8 text-sm text-muted-foreground">Carregando…</div>;
 
-  const canManageOrder = ["admin", "manager", "waiter"].includes(user?.role);
-  const editable = canManageOrder && (order.status === "new" || order.status === "in_preparation");
-  const cancellable = canManageOrder && TRANSITIONS[order.status].includes("cancelled");
-  const nextStatus = user?.role === "kitchen" && order.status === "ready" ? null : NEXT_STATUS[order.status];
+  const canEdit = hasPermission(user, "orders.edit");
+  const canDuplicate = hasPermission(user, "orders.create");
+  const canCancel = hasPermission(user, "orders.cancel");
+  const canOrderStatus = hasPermission(user, "orders.status");
+  const canKdsStatus = hasPermission(user, "kds.status");
+  const editable = canEdit && (order.status === "new" || order.status === "in_preparation");
+  const cancellable = canCancel && TRANSITIONS[order.status].includes("cancelled");
+  const rawNextStatus = NEXT_STATUS[order.status];
+  const nextStatus = rawNextStatus && (
+    canOrderStatus || (canKdsStatus && rawNextStatus !== "delivered")
+  ) ? rawNextStatus : null;
+  const previousStatus = PREV_STATUS[order.status] && (canOrderStatus || canKdsStatus)
+    ? PREV_STATUS[order.status] : null;
 
   const timelineEvents = buildAuditTimelineEvents(order, auditEvents).map((ev) => ({
     ...ev,
@@ -145,7 +155,7 @@ export default function OrderDetailPage() {
               </Button>
             </Link>
           )}
-          {canManageOrder && (
+          {canDuplicate && (
             <Button variant="outline" size="sm" onClick={duplicate} disabled={busy} data-testid="duplicate-order-button">
               <Copy className="w-4 h-4 mr-1.5" /> Duplicar
             </Button>
@@ -177,20 +187,20 @@ export default function OrderDetailPage() {
       </header>
 
       {/* Status advance/rollback actions */}
-      {(PREV_STATUS[order.status] || nextStatus) && (
+      {(previousStatus || nextStatus) && (
         <Card className="mb-6">
           <CardContent className="p-4 flex flex-wrap items-center gap-3">
-            {PREV_STATUS[order.status] && (
+            {previousStatus && (
               <>
                 <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Voltar para</div>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => changeStatus(PREV_STATUS[order.status])}
+                  onClick={() => changeStatus(previousStatus)}
                   disabled={busy}
-                  data-testid={`revert-to-${PREV_STATUS[order.status]}`}
+                  data-testid={`revert-to-${previousStatus}`}
                 >
-                  <RotateCcw className="w-4 h-4 mr-1.5" /> {STATUS_LABEL[PREV_STATUS[order.status]]}
+                  <RotateCcw className="w-4 h-4 mr-1.5" /> {STATUS_LABEL[previousStatus]}
                 </Button>
               </>
             )}

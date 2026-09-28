@@ -5,6 +5,7 @@ import jwt
 from core.db import get_db
 from core.security import decode_token
 from core.hub_access import check_hub_access
+from core.permissions import effective_permissions
 
 
 # Paths that a user with must_change_password=True is still allowed to hit.
@@ -50,6 +51,8 @@ async def get_current_user(request: Request) -> dict:
         await check_hub_access(user["restaurant_id"], user.get("hub_user_id", ""),
                                user["role"], payload.get("hub_access"))
 
+    user["permissions"] = effective_permissions(user)
+
     # If password change is required, only allow a small allow-list of routes.
     if user.get("must_change_password") and request.url.path not in _PW_LOCK_ALLOWED_PATHS:
         raise HTTPException(
@@ -67,6 +70,10 @@ class Tenant:
         self.restaurant_id: str = user["restaurant_id"]
         self.user_id: str = user["id"]
         self.role: str = user.get("role", "admin")
+        self.permissions: frozenset[str] = frozenset(effective_permissions(user))
+
+    def can(self, permission: str) -> bool:
+        return permission in self.permissions
 
 
 async def get_tenant(user: dict = Depends(get_current_user)) -> Tenant:
@@ -82,6 +89,28 @@ def require_roles(*allowed: str):
     async def _dep(tenant: Tenant = Depends(get_tenant)) -> Tenant:
         if tenant.role not in allowed_set:
             raise HTTPException(status_code=403, detail="Acesso negado para este papel")
+        return tenant
+
+    return _dep
+
+
+def require_permissions(*required: str):
+    required_set = set(required)
+
+    async def _dep(tenant: Tenant = Depends(get_tenant)) -> Tenant:
+        if not required_set.issubset(tenant.permissions):
+            raise HTTPException(status_code=403, detail="Permissão insuficiente")
+        return tenant
+
+    return _dep
+
+
+def require_any_permission(*allowed: str):
+    allowed_set = set(allowed)
+
+    async def _dep(tenant: Tenant = Depends(get_tenant)) -> Tenant:
+        if tenant.permissions.isdisjoint(allowed_set):
+            raise HTTPException(status_code=403, detail="Permissão insuficiente")
         return tenant
 
     return _dep

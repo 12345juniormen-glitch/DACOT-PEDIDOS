@@ -11,7 +11,7 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from core.db import get_db
-from core.deps import Tenant, require_roles
+from core.deps import Tenant, require_permissions
 from modules.customers.routes import CustomerInput, _normalize_phone, create_customer
 from modules.whatsapp.provider import (
     connect as provider_connect,
@@ -130,25 +130,25 @@ async def receive_provider_event(
 
 
 @router.get("/config")
-async def config_state(tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+async def config_state(tenant: Tenant = Depends(require_permissions("whatsapp.view"))):
     state = await connection_status(tenant.restaurant_id)
-    if tenant.role == "waiter":
+    if not tenant.can("whatsapp.configure"):
         state.pop("qr_data_url", None)
     return state
 
 
 @router.post("/connect")
-async def connect_whatsapp(tenant: Tenant = Depends(require_roles("admin", "manager"))):
+async def connect_whatsapp(tenant: Tenant = Depends(require_permissions("whatsapp.configure"))):
     return await provider_connect(tenant.restaurant_id)
 
 
 @router.delete("/connection")
-async def disconnect_whatsapp(tenant: Tenant = Depends(require_roles("admin", "manager"))):
+async def disconnect_whatsapp(tenant: Tenant = Depends(require_permissions("whatsapp.configure"))):
     return await provider_disconnect(tenant.restaurant_id)
 
 
 @router.get("/conversations")
-async def conversations(tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+async def conversations(tenant: Tenant = Depends(require_permissions("whatsapp.view"))):
     docs = await get_db().wa_conversations.find(
         {"restaurant_id": tenant.restaurant_id}, {"_id": 0}
     ).sort("last_message_at", -1).limit(100).to_list(100)
@@ -165,12 +165,12 @@ async def _conversation(tenant, conversation_id):
 
 
 @router.get("/conversations/{conversation_id}")
-async def conversation_detail(conversation_id: str, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+async def conversation_detail(conversation_id: str, tenant: Tenant = Depends(require_permissions("whatsapp.view"))):
     return _conversation_out(await _conversation(tenant, conversation_id))
 
 
 @router.get("/conversations/{conversation_id}/messages")
-async def messages(conversation_id: str, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter")),
+async def messages(conversation_id: str, tenant: Tenant = Depends(require_permissions("whatsapp.view")),
                    page: int = Query(1, ge=1)):
     await _conversation(tenant, conversation_id)
     query = {"restaurant_id": tenant.restaurant_id, "conversation_id": conversation_id}
@@ -181,7 +181,7 @@ async def messages(conversation_id: str, tenant: Tenant = Depends(require_roles(
 
 
 @router.post("/conversations/{conversation_id}/read")
-async def mark_read(conversation_id: str, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+async def mark_read(conversation_id: str, tenant: Tenant = Depends(require_permissions("whatsapp.operate"))):
     await _conversation(tenant, conversation_id)
     await get_db().wa_conversations.update_one(
         {"restaurant_id": tenant.restaurant_id, "id": conversation_id}, {"$set": {"unread": 0}}
@@ -210,14 +210,14 @@ ALLOWED_TEMPLATE_VARIABLES = {"cliente", "pedido", "restaurante"}
 
 
 @router.get("/auto-messages")
-async def auto_messages(tenant: Tenant = Depends(require_roles("admin", "manager"))):
+async def auto_messages(tenant: Tenant = Depends(require_permissions("whatsapp.configure"))):
     return await get_auto_message_settings(get_db(), tenant.restaurant_id)
 
 
 @router.put("/auto-messages")
 async def update_auto_messages(
     payload: AutoMessagesInput,
-    tenant: Tenant = Depends(require_roles("admin", "manager")),
+    tenant: Tenant = Depends(require_permissions("whatsapp.configure")),
 ):
     messages = payload.model_dump()
     for setting in messages.values():
@@ -239,7 +239,7 @@ async def update_auto_messages(
 
 @router.post("/conversations/{conversation_id}/order-updates-consent")
 async def order_updates_consent(conversation_id: str, payload: ConsentInput,
-                                tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+                                tenant: Tenant = Depends(require_permissions("whatsapp.operate"))):
     await _conversation(tenant, conversation_id)
     at = datetime.now(timezone.utc).isoformat()
     await get_db().wa_conversations.update_one(
@@ -257,7 +257,7 @@ class LinkCustomer(BaseModel):
 
 @router.post("/conversations/{conversation_id}/customer")
 async def link_customer(conversation_id: str, payload: LinkCustomer,
-                        tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+                        tenant: Tenant = Depends(require_permissions("whatsapp.operate"))):
     conversation = await _conversation(tenant, conversation_id)
     db = get_db()
     if payload.customer_id:
@@ -301,7 +301,7 @@ class SendInput(BaseModel):
 
 @router.post("/conversations/{conversation_id}/messages", status_code=201)
 async def reply(conversation_id: str, payload: SendInput,
-                tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+                tenant: Tenant = Depends(require_permissions("whatsapp.operate"))):
     conversation = await _conversation(tenant, conversation_id)
     external_id = await send_text(tenant.restaurant_id, conversation["phone"], payload.text)
     now = datetime.now(timezone.utc).isoformat()

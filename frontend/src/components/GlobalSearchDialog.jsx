@@ -15,6 +15,7 @@ import { useAuth } from "@/context/AuthContext";
 import { api, formatApiError } from "@/lib/api";
 import { brl } from "@/lib/format";
 import { toast } from "sonner";
+import { hasPermission } from "@/lib/permissions";
 
 const EMPTY_RESULTS = { orders: [], customers: [], products: [] };
 
@@ -26,10 +27,11 @@ const EMPTY_RESULTS = { orders: [], customers: [], products: [] };
 export function GlobalSearchDialog({ open, onOpenChange }) {
   const nav = useNavigate();
   const { user } = useAuth();
-  // Só mostra (e busca) o que a role já pode abrir — evita levar o usuário a uma
-  // rota que o RoleGuard existente (App.js) vai bloquear de volta para o Dashboard.
-  const canSeeCustomers = ["admin", "manager", "waiter"].includes(user?.role);
-  const canSeeProducts = ["admin", "manager"].includes(user?.role);
+  // Só mostra (e busca) o que o usuário pode abrir, evitando resultados para
+  // rotas protegidas por outra permissão.
+  const canSeeOrders = hasPermission(user, "orders.view");
+  const canSeeCustomers = hasPermission(user, "customers.view");
+  const canSeeProducts = hasPermission(user, "products.view");
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(EMPTY_RESULTS);
@@ -57,7 +59,7 @@ export function GlobalSearchDialog({ open, onOpenChange }) {
     setLoading(true);
     const t = setTimeout(() => {
       const orderSearch = q.replace(/^#/, "");
-      const ordersP = api.get("/orders", { params: { search: orderSearch, limit: 5 } });
+      const ordersP = canSeeOrders ? api.get("/orders", { params: { search: orderSearch, limit: 5 } }) : Promise.resolve({ data: [] });
       const customersP = canSeeCustomers ? api.get("/customers", { params: { search: q } }) : Promise.resolve({ data: [] });
       const productsP = canSeeProducts ? api.get("/products", { params: { search: q } }) : Promise.resolve({ data: [] });
       Promise.all([ordersP, customersP, productsP])
@@ -83,8 +85,7 @@ export function GlobalSearchDialog({ open, onOpenChange }) {
       cancelled = true;
       clearTimeout(t);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- canSeeCustomers/canSeeProducts derivam do user, estável durante a sessão
-  }, [query]);
+  }, [query, canSeeOrders, canSeeCustomers, canSeeProducts]);
 
   const goTo = (path) => {
     onOpenChange(false);

@@ -19,19 +19,20 @@ import KitchenPage from "@/pages/KitchenPage";
 import WhatsAppPage from "@/pages/WhatsAppPage";
 import NotFoundPage from "@/pages/NotFoundPage";
 import "@/App.css";
+import { hasPermission } from "@/lib/permissions";
 
-function Shell({ children, roles }) {
+function Shell({ children, permission }) {
   return (
     <ProtectedRoute>
-      <RoleGuard roles={roles}>
+      <PermissionGuard permission={permission}>
         <AppShell>{children}</AppShell>
-      </RoleGuard>
+      </PermissionGuard>
     </ProtectedRoute>
   );
 }
-function RoleGuard({ roles, children }) {
+function PermissionGuard({ permission, children }) {
   const { user } = useAuth();
-  if (roles && user && !roles.includes(user.role)) return <Navigate to="/" replace />;
+  if (permission && user && !hasPermission(user, permission)) return <Navigate to="/meu-perfil" replace />;
   return children;
 }
 
@@ -50,17 +51,17 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/mudar-senha" element={<ForcedPwGuard />} />
-          <Route path="/" element={<Shell><DashboardPage /></Shell>} />
-          <Route path="/:restaurantSlug" element={<Shell><DashboardPage /></Shell>} />
-          <Route path="/pedidos/novo" element={<Shell roles={["admin","manager","waiter"]}><OrderCreatePage /></Shell>} />
-          <Route path="/pedidos/:id" element={<Shell><ErrorBoundary><OrderDetailPage /></ErrorBoundary></Shell>} />
-          <Route path="/pedidos/:id/editar" element={<Shell roles={["admin","manager","waiter"]}><OrderEditPage /></Shell>} />
-          <Route path="/historico" element={<Shell><OrdersHistoryPage /></Shell>} />
-          <Route path="/produtos" element={<Shell roles={["admin","manager"]}><ProductsPage /></Shell>} />
-          <Route path="/clientes" element={<Shell roles={["admin","manager","waiter"]}><CustomersPage /></Shell>} />
-          <Route path="/usuarios" element={<Shell roles={["admin"]}><UsersPage /></Shell>} />
-          <Route path="/cozinha" element={<Shell roles={["kitchen"]}><KitchenPage /></Shell>} />
-          <Route path="/whatsapp" element={<Shell roles={["admin","manager","waiter"]}><WhatsAppPage /></Shell>} />
+          <Route path="/" element={<Shell permission="dashboard.view"><DashboardPage /></Shell>} />
+          <Route path="/:restaurantSlug" element={<Shell permission="dashboard.view"><DashboardPage /></Shell>} />
+          <Route path="/pedidos/novo" element={<Shell permission="orders.create"><OrderCreatePage /></Shell>} />
+          <Route path="/pedidos/:id" element={<Shell permission="orders.view"><ErrorBoundary><OrderDetailPage /></ErrorBoundary></Shell>} />
+          <Route path="/pedidos/:id/editar" element={<Shell permission="orders.edit"><OrderEditPage /></Shell>} />
+          <Route path="/historico" element={<Shell permission="history.view"><OrdersHistoryPage /></Shell>} />
+          <Route path="/produtos" element={<Shell permission="products.view"><ProductsPage /></Shell>} />
+          <Route path="/clientes" element={<Shell permission="customers.view"><CustomersPage /></Shell>} />
+          <Route path="/usuarios" element={<Shell permission="users.view"><UsersPage /></Shell>} />
+          <Route path="/cozinha" element={<Shell permission="kds.view"><KitchenPage /></Shell>} />
+          <Route path="/whatsapp" element={<Shell permission="whatsapp.view"><WhatsAppPage /></Shell>} />
           <Route path="/meu-perfil" element={<Shell><MyProfilePage /></Shell>} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

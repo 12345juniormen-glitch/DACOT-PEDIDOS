@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from core.db import get_db
-from core.deps import Tenant, get_tenant, require_roles
+from core.deps import Tenant, require_permissions
 
 
 class CustomerInput(BaseModel):
@@ -66,7 +66,7 @@ router = APIRouter(prefix="/customers", tags=["customers"])
 
 
 @router.get("", response_model=list[CustomerOut])
-async def list_customers(tenant: Tenant = Depends(get_tenant), search: str = Query("", max_length=120)):
+async def list_customers(tenant: Tenant = Depends(require_permissions("customers.view")), search: str = Query("", max_length=120)):
     db = get_db()
     q: dict = {"restaurant_id": tenant.restaurant_id}
     if search.strip():
@@ -79,7 +79,7 @@ async def list_customers(tenant: Tenant = Depends(get_tenant), search: str = Que
 
 
 @router.post("", response_model=CustomerOut, status_code=201)
-async def create_customer(payload: CustomerInput, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+async def create_customer(payload: CustomerInput, tenant: Tenant = Depends(require_permissions("customers.manage"))):
     db = get_db()
     now = datetime.now(timezone.utc).isoformat()
     normalized_phone = _normalize_phone(payload.phone)
@@ -109,7 +109,7 @@ async def create_customer(payload: CustomerInput, tenant: Tenant = Depends(requi
 @router.post("/import", response_model=ContactImportResult)
 async def import_contacts(
     payload: ContactImportInput,
-    tenant: Tenant = Depends(require_roles("admin", "manager", "waiter")),
+    tenant: Tenant = Depends(require_permissions("customers.manage")),
 ):
     """Import contacts into the authenticated restaurant, deduplicated by phone.
 
@@ -159,7 +159,7 @@ async def import_contacts(
 
 
 @router.get("/{customer_id}", response_model=CustomerOut)
-async def get_customer(customer_id: str, tenant: Tenant = Depends(get_tenant)):
+async def get_customer(customer_id: str, tenant: Tenant = Depends(require_permissions("customers.view"))):
     db = get_db()
     doc = await db.customers.find_one(
         {"id": customer_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0}
@@ -170,7 +170,7 @@ async def get_customer(customer_id: str, tenant: Tenant = Depends(get_tenant)):
 
 
 @router.put("/{customer_id}", response_model=CustomerOut)
-async def update_customer(customer_id: str, payload: CustomerInput, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+async def update_customer(customer_id: str, payload: CustomerInput, tenant: Tenant = Depends(require_permissions("customers.manage"))):
     db = get_db()
     normalized_phone = _normalize_phone(payload.phone)
     if payload.phone.strip() and not 8 <= len(normalized_phone) <= 15:

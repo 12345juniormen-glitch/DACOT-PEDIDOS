@@ -10,6 +10,7 @@ from pymongo import ReturnDocument
 from core.db import get_db
 from core.deps import get_current_user
 from core.security import create_access_token, hash_password, verify_password
+from core.permissions import effective_permissions
 
 
 UserRole = Literal["admin", "manager", "waiter", "kitchen"]
@@ -30,6 +31,7 @@ class UserPublic(BaseModel):
     email: EmailStr
     name: str
     role: UserRole
+    permissions: list[str] = Field(default_factory=list)
     restaurant_id: str
     must_change_password: bool = False
     active: bool = True
@@ -85,6 +87,7 @@ async def login(payload: LoginInput, request: Request):
     user.pop("password_hash", None)
     user.setdefault("active", True)
     user.setdefault("must_change_password", False)
+    user["permissions"] = effective_permissions(user)
     return LoginResponse(token=token, user=UserPublic(**user))
 
 
@@ -92,6 +95,7 @@ async def login(payload: LoginInput, request: Request):
 async def me(user: dict = Depends(get_current_user)):
     user.setdefault("active", True)
     user.setdefault("must_change_password", False)
+    user["permissions"] = effective_permissions(user)
     return UserPublic(**user)
 
 

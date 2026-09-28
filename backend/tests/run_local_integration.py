@@ -174,6 +174,7 @@ def main():
     parser.add_argument("--mongod", required=True, type=Path)
     parser.add_argument("--all", action="store_true", help="Run the full existing backend integration suite")
     parser.add_argument("--handoff-only", action="store_true", help="Run only concurrent handoff regression tests")
+    parser.add_argument("--permissions-only", action="store_true", help="Run only auth/user permission regression tests")
     parser.add_argument("--whatsapp-only", action="store_true", help="Run only WhatsApp provider integration tests")
     parser.add_argument("--serial", action="store_true", help="Disable pytest-xdist for diagnosis of shared-fixture races")
     args = parser.parse_args()
@@ -247,6 +248,7 @@ def main():
                 print("Isolated MongoDB, local Hub/provider stub and API ready on 127.0.0.1", flush=True)
                 selected = (["tests/backend_test.py", "tests/test_contact_import.py", "tests/test_p0_local.py", "tests/test_handoff_concurrency.py", "tests/test_order_history_audit.py", "tests/test_whatsapp.py"]
                             if args.all else ["tests/test_handoff_concurrency.py"] if args.handoff_only
+                            else ["tests/test_p0_local.py::test_custom_permissions_and_optional_password_change"] if args.permissions_only
                             else ["tests/test_whatsapp.py"] if args.whatsapp_only else TESTS)
                 workers = ["-n", "0"] if args.serial else []
                 result = subprocess.run([sys.executable, "-m", "pytest", *selected, *workers, "-q", "-ra"], cwd=BACKEND, env=env)

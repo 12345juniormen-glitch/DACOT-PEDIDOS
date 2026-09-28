@@ -16,7 +16,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from core.db import get_db
-from core.deps import Tenant, get_tenant, require_roles
+from core.deps import Tenant, require_any_permission, require_permissions
 from core.money import cents_to_reais, reais_to_cents
 from modules.whatsapp.service import notify_order
 
@@ -273,7 +273,7 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 
 @router.get("", response_model=list[OrderOut])
 async def list_orders(
-    tenant: Tenant = Depends(get_tenant),
+    tenant: Tenant = Depends(require_any_permission("orders.view", "dashboard.view", "kds.view")),
     status_filter: Optional[str] = Query(None, alias="status"),
     active_only: bool = Query(False, description="Se true, oculta 'delivered' e 'cancelled'"),
     customer_id: Optional[str] = Query(None, description="Filtra pelo histórico de um cliente"),
@@ -314,7 +314,7 @@ async def list_orders(
 
 @router.get("/history", response_model=OrderHistoryPage)
 async def order_history(
-    tenant: Tenant = Depends(get_tenant),
+    tenant: Tenant = Depends(require_permissions("history.view")),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=50),
     status_filter: Optional[OrderStatus] = Query(None, alias="status"),
@@ -358,7 +358,7 @@ async def order_history(
 
 
 @router.get("/stats")
-async def orders_stats(tenant: Tenant = Depends(require_roles("admin", "manager"))):
+async def orders_stats(tenant: Tenant = Depends(require_permissions("dashboard.metrics"))):
     db = get_db()
     pipeline = [
         {"$match": {"restaurant_id": tenant.restaurant_id}},
@@ -417,7 +417,7 @@ async def orders_stats(tenant: Tenant = Depends(require_roles("admin", "manager"
 
 
 @router.post("", response_model=OrderOut, status_code=201)
-async def create_order(payload: OrderCreateInput, background_tasks: BackgroundTasks, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+async def create_order(payload: OrderCreateInput, background_tasks: BackgroundTasks, tenant: Tenant = Depends(require_permissions("orders.create"))):
     db = get_db()
     items_snap = await _build_items_snapshot(db, tenant.restaurant_id, payload.items)
     subtotal_c, discount_c, total_c = _compute_totals(items_snap, payload.discount_type, payload.discount_value)
@@ -449,7 +449,7 @@ async def create_order(payload: OrderCreateInput, background_tasks: BackgroundTa
 
 
 @router.get("/{order_id}", response_model=OrderOut)
-async def get_order(order_id: str, tenant: Tenant = Depends(get_tenant)):
+async def get_order(order_id: str, tenant: Tenant = Depends(require_permissions("orders.view"))):
     db = get_db()
     doc = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0, "events": 0})
     if not doc:
@@ -458,7 +458,7 @@ async def get_order(order_id: str, tenant: Tenant = Depends(get_tenant)):
 
 
 @router.get("/{order_id}/events", response_model=list[OrderEventOut])
-async def get_order_events(order_id: str, tenant: Tenant = Depends(get_tenant)):
+async def get_order_events(order_id: str, tenant: Tenant = Depends(require_permissions("orders.view"))):
     doc = await get_db().orders.find_one(
         {"id": order_id, "restaurant_id": tenant.restaurant_id},
         {"_id": 0, "events": 1},
@@ -469,7 +469,7 @@ async def get_order_events(order_id: str, tenant: Tenant = Depends(get_tenant)):
 
 
 @router.put("/{order_id}", response_model=OrderOut)
-async def update_order(order_id: str, payload: OrderUpdateInput, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+async def update_order(order_id: str, payload: OrderUpdateInput, tenant: Tenant = Depends(require_permissions("orders.edit"))):
     db = get_db()
     existing = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0, "events": 0})
     if not existing:
@@ -508,12 +508,12 @@ async def update_order(order_id: str, payload: OrderUpdateInput, tenant: Tenant 
 
 
 @router.patch("/{order_id}/status", response_model=OrderOut)
-async def change_status(order_id: str, payload: OrderStatusInput, tenant: Tenant = Depends(get_tenant), background_tasks: BackgroundTasks = None):
-    # Kitchen: can move within the active pipeline (advance new→in_preparation→ready, or roll
-    # back a mistaken advance) but never touch the terminal states delivered/cancelled.
-    # The origin check is enforced by ALLOWED_TRANSITIONS below (kitchen can't skip states).
-    if tenant.role == "kitchen" and payload.status not in {"new", "in_preparation", "ready"}:
-        raise HTTPException(status_code=403, detail="Cozinha só pode iniciar preparo, marcar como Pronto ou desfazer esses passos")
+async def change_status(order_id: str, payload: OrderStatusInput, tenant: Tenant = Depends(require_any_permission("orders.status", "orders.cancel", "kds.status")), background_tasks: BackgroundTasks = None):
+    if payload.status == "cancelled" and not tenant.can("orders.cancel"):
+        raise HTTPException(status_code=403, detail="Sem permissão para cancelar pedidos")
+    if payload.status != "cancelled" and not tenant.can("orders.status"):
+        if not tenant.can("kds.status") or payload.status not in {"new", "in_preparation", "ready"}:
+            raise HTTPException(status_code=403, detail="Sem permissão para esta alteração de status")
     db = get_db()
     existing = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0, "events": 0})
     if not existing:
@@ -545,12 +545,12 @@ async def change_status(order_id: str, payload: OrderStatusInput, tenant: Tenant
 
 
 @router.post("/{order_id}/cancel", response_model=OrderOut)
-async def cancel_order(order_id: str, background_tasks: BackgroundTasks, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+async def cancel_order(order_id: str, background_tasks: BackgroundTasks, tenant: Tenant = Depends(require_permissions("orders.cancel"))):
     return await change_status(order_id, OrderStatusInput(status="cancelled"), tenant, background_tasks)
 
 
 @router.post("/{order_id}/duplicate", response_model=OrderOut, status_code=201)
-async def duplicate_order(order_id: str, tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+async def duplicate_order(order_id: str, tenant: Tenant = Depends(require_permissions("orders.create"))):
     db = get_db()
     src = await db.orders.find_one({"id": order_id, "restaurant_id": tenant.restaurant_id}, {"_id": 0, "events": 0})
     if not src:

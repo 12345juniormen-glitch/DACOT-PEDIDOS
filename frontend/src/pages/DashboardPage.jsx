@@ -13,6 +13,7 @@ import { toast } from "sonner";
 
 import { useAuth } from "@/context/AuthContext";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { hasPermission } from "@/lib/permissions";
 
 const COLUMNS = [
   { key: "new", label: "Novo" },
@@ -28,7 +29,11 @@ const ATTENTION_THRESHOLD_MS = 20 * 60 * 1000;
 export default function DashboardPage() {
   useDocumentTitle("Dashboard");
   const { user } = useAuth();
-  const canSeeFinance = user && (user.role === "admin" || user.role === "manager");
+  const canSeeFinance = hasPermission(user, "dashboard.metrics");
+  const canCreateOrder = hasPermission(user, "orders.create");
+  const canViewKds = hasPermission(user, "kds.view");
+  const canOrderStatus = hasPermission(user, "orders.status");
+  const canKdsStatus = hasPermission(user, "kds.status");
   const [orders, setOrders] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -75,7 +80,7 @@ export default function DashboardPage() {
 
   const advance = async (o) => {
     const next = NEXT_STATUS[o.status];
-    if (!next || (user?.role === "kitchen" && next === "delivered")) return;
+    if (!next || (!canOrderStatus && (!canKdsStatus || next === "delivered"))) return;
     try {
       await api.patch(`/orders/${o.id}/status`, { status: next });
       toast.success(`Pedido #${o.order_number} → ${STATUS_LABEL[next]}`);
@@ -95,7 +100,7 @@ export default function DashboardPage() {
             <Button variant="outline" onClick={load} disabled={loading} data-testid="refresh-orders-button" size="sm">
               <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} /> Atualizar
             </Button>
-            {user?.role !== "kitchen" && (
+            {canCreateOrder && (
               <Link to="/pedidos/novo">
                 <Button data-testid="create-order-button" size="sm">
                   <Plus className="w-4 h-4 mr-1.5" /> Novo Pedido
@@ -106,7 +111,7 @@ export default function DashboardPage() {
         }
       />
 
-      {user?.role === "kitchen" && (
+      {canViewKds && (
         <Link
           to="/cozinha"
           className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 hover:bg-orange-100 dark:border-orange-900 dark:bg-orange-950 dark:hover:bg-orange-900 transition-colors"
@@ -195,7 +200,7 @@ export default function DashboardPage() {
                     <div className="text-xs text-muted-foreground mt-0.5">
                       {o.items.length} ite{o.items.length !== 1 ? "ns" : "m"} · {brl(o.total)}
                     </div>
-                    {NEXT_STATUS[o.status] && !(user?.role === "kitchen" && NEXT_STATUS[o.status] === "delivered") && (
+                    {NEXT_STATUS[o.status] && (canOrderStatus || (canKdsStatus && NEXT_STATUS[o.status] !== "delivered")) && (
                       <button
                         onClick={() => advance(o)}
                         data-testid={`advance-${o.order_number}`}

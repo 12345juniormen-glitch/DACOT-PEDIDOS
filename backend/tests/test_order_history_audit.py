@@ -27,6 +27,7 @@ def session(tenant_id, role="admin"):
         "role": role, "module": "orders", "iss": os.environ["HANDOFF_ISSUER"],
         "aud": os.environ["HANDOFF_AUDIENCE"], "iat": now, "nbf": now - 5,
         "exp": now + 60, "jti": uuid.uuid4().hex, "handoff_version": 1,
+        "hub_access": {"user": 1, "tenant": 1, "module": 1},
     }, os.environ["HANDOFF_JWT_SECRET"], algorithm="HS256")
     response = requests.post(f"{API}/session/exchange", json={"handoff": token}, timeout=20)
     assert response.status_code == 200, response.text[:200]
@@ -59,11 +60,11 @@ def status(headers, order_id, target):
 
 
 def test_history_pages_are_bounded_stable_and_tenant_scoped():
-    tenant = f"history-page-{uuid.uuid4().hex}"
+    tenant = uuid.uuid4().hex[:24]
     headers, _ = session(tenant)
     p = product(headers, "Paged product")
     created = [order(headers, p) for _ in range(7)]
-    other_headers, _ = session(f"other-{uuid.uuid4().hex}")
+    other_headers, _ = session(uuid.uuid4().hex[:24])
     other = order(other_headers, product(other_headers, "Foreign product"))
     pages = [history(headers, page=n, page_size=3) for n in (1, 2, 3)]
     assert all(r.status_code == 200 for r in pages)
@@ -89,7 +90,7 @@ def test_history_indexes_match_tenant_and_filter_access_paths():
 
 
 def test_history_filters_combine_period_status_customer_product_and_search():
-    tenant = f"history-filter-{uuid.uuid4().hex}"
+    tenant = uuid.uuid4().hex[:24]
     headers, _ = session(tenant)
     p1, p2 = product(headers, "Filter one"), product(headers, "Filter two")
     customer = requests.post(f"{API}/customers", json={"name": "Ana Filtro", "phone": "11987654321"}, headers=headers, timeout=20)
@@ -123,7 +124,7 @@ def test_history_filters_combine_period_status_customer_product_and_search():
 
 
 def test_status_events_record_actor_rollback_and_delivery_without_overwriting():
-    tenant = f"history-events-{uuid.uuid4().hex}"
+    tenant = uuid.uuid4().hex[:24]
     admin_h, admin_id = session(tenant)
     kitchen_h, kitchen_id = session(tenant, "kitchen")
     created = order(admin_h, product(admin_h, "Audit product"))
@@ -150,12 +151,12 @@ def test_status_events_record_actor_rollback_and_delivery_without_overwriting():
     assert trail[0]["occurred_at"] == created["created_at"]
     assert trail[-1]["occurred_at"] == delivered.json()["delivered_at"]
     assert events(kitchen_h, oid).json() == trail
-    foreign_h, _ = session(f"foreign-{uuid.uuid4().hex}")
+    foreign_h, _ = session(uuid.uuid4().hex[:24])
     assert events(foreign_h, oid).status_code == 404
 
 
 def test_normal_operations_only_append_events_and_old_orders_remain_usable():
-    tenant = f"history-legacy-{uuid.uuid4().hex}"
+    tenant = uuid.uuid4().hex[:24]
     headers, _ = session(tenant)
     p = product(headers, "Legacy product")
     created = order(headers, p)
