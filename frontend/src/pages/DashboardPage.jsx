@@ -31,7 +31,6 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const canSeeFinance = hasPermission(user, "dashboard.metrics");
   const canCreateOrder = hasPermission(user, "orders.create");
-  const canViewKds = hasPermission(user, "kds.view");
   const canOrderStatus = hasPermission(user, "orders.status");
   const canKdsStatus = hasPermission(user, "kds.status");
   const [orders, setOrders] = useState([]);
@@ -111,7 +110,7 @@ export default function DashboardPage() {
         }
       />
 
-      {canViewKds && (
+      {user?.role === "kitchen" && (
         <Link
           to="/cozinha"
           className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 hover:bg-orange-100 dark:border-orange-900 dark:bg-orange-950 dark:hover:bg-orange-900 transition-colors"
