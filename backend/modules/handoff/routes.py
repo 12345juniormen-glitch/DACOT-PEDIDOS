@@ -38,6 +38,8 @@ class ExchangeUser(BaseModel):
     email: str
     name: str
     role: str
+    custom_role_id: str | None = None
+    custom_role_name: str | None = None
     permissions: list[str] = Field(default_factory=list)
     restaurant_id: str
     restaurant_slug: str | None = None
@@ -237,6 +239,11 @@ async def exchange(payload: ExchangeInput):
     # Auto-provision (idempotent)
     await _find_or_create_restaurant(restaurant_id)
     user = await _find_or_create_user(restaurant_id, hub_user_id, role)
+    custom_role = None
+    if user.get("custom_role_id"):
+        custom_role = await get_db().custom_roles.find_one(
+            {"id": user["custom_role_id"], "restaurant_id": restaurant_id}, {"_id": 0, "name": 1}
+        )
 
     # Issue local session (respects existing security helper; expiry passed as arg to avoid env races)
     session_minutes = int(float(os.environ.get("SESSION_HOURS", "8")) * 60)
@@ -254,6 +261,8 @@ async def exchange(payload: ExchangeInput):
         email=user["email"],
         name=user["name"],
         role=user["role"],
+        custom_role_id=user.get("custom_role_id"),
+        custom_role_name=custom_role.get("name") if custom_role else None,
         permissions=effective_permissions(user),
         restaurant_id=user["restaurant_id"],
         restaurant_slug=str(handoff_claims.get("restaurant_slug", "")).strip() or None,

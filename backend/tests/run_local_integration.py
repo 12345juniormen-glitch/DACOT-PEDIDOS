@@ -248,7 +248,10 @@ def main():
                 print("Isolated MongoDB, local Hub/provider stub and API ready on 127.0.0.1", flush=True)
                 selected = (["tests/backend_test.py", "tests/test_contact_import.py", "tests/test_p0_local.py", "tests/test_handoff_concurrency.py", "tests/test_order_history_audit.py", "tests/test_whatsapp.py"]
                             if args.all else ["tests/test_handoff_concurrency.py"] if args.handoff_only
-                            else ["tests/test_p0_local.py::test_custom_permissions_and_optional_password_change"] if args.permissions_only
+                            else [
+                                "tests/test_p0_local.py::test_custom_permissions_and_optional_password_change",
+                                "tests/test_p0_local.py::test_custom_roles_are_tenant_scoped_and_safe_to_edit_or_delete",
+                            ] if args.permissions_only
                             else ["tests/test_whatsapp.py"] if args.whatsapp_only else TESTS)
                 workers = ["-n", "0"] if args.serial else []
                 result = subprocess.run([sys.executable, "-m", "pytest", *selected, *workers, "-q", "-ra"], cwd=BACKEND, env=env)

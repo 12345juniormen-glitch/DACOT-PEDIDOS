@@ -237,3 +237,76 @@ def test_custom_permissions_and_optional_password_change():
               "permissions": ["users.view"]},
     )
     assert protected.status_code == 409
+
+
+def test_custom_roles_are_tenant_scoped_and_safe_to_edit_or_delete():
+    def admin_session(tenant_id):
+        now = int(time.time())
+        handoff = jwt.encode({
+            "sub": f"tenant_user:{uuid.uuid4().hex}", "restaurant_id": tenant_id,
+            "role": "admin", "module": "orders", "iss": os.environ["HANDOFF_ISSUER"],
+            "aud": os.environ["HANDOFF_AUDIENCE"], "iat": now, "nbf": now - 5,
+            "exp": now + 60, "jti": uuid.uuid4().hex, "handoff_version": 1,
+            "hub_access": {"user": 1, "tenant": 1, "module": 1},
+        }, os.environ["HANDOFF_JWT_SECRET"], algorithm="HS256")
+        response = requests.post(f"{API}/session/exchange", json={"handoff": handoff}, timeout=20)
+        assert response.status_code == 200, response.text[:200]
+        return {"Authorization": f"Bearer {response.json()['token']}"}
+
+    tenant_a, tenant_b = uuid.uuid4().hex[:24], uuid.uuid4().hex[:24]
+    headers_a, headers_b = admin_session(tenant_a), admin_session(tenant_b)
+    created_role = requests.post(f"{API}/users/custom-roles", headers=headers_a, timeout=20, json={
+        "name": "Garçom", "permissions": ["orders.view", "orders.create"],
+    })
+    assert created_role.status_code == 201, created_role.text[:200]
+    custom_role = created_role.json()
+    assert [item["id"] for item in requests.get(f"{API}/users/custom-roles", headers=headers_a, timeout=20).json()] == [custom_role["id"]]
+    assert requests.get(f"{API}/users/custom-roles", headers=headers_b, timeout=20).json() == []
+
+    # The same display name is valid in another restaurant, but cross-tenant use is not.
+    same_name = requests.post(f"{API}/users/custom-roles", headers=headers_b, timeout=20, json={
+        "name": "Garçom", "permissions": ["customers.view"],
+    })
+    assert same_name.status_code == 201, same_name.text[:200]
+    foreign_user = requests.post(f"{API}/users", headers=headers_b, timeout=20, json={
+        "name": "Foreign role", "email": f"foreign-{uuid.uuid4().hex}@example.com",
+        "temp_password": "password-1", "role": "admin", "custom_role_id": custom_role["id"],
+    })
+    assert foreign_user.status_code == 404
+
+    assigned = requests.post(f"{API}/users", headers=headers_a, timeout=20, json={
+        "name": "Assigned role", "email": f"assigned-{uuid.uuid4().hex}@example.com",
+        "temp_password": "password-1", "role": "admin", "custom_role_id": custom_role["id"],
+    })
+    assert assigned.status_code == 201, assigned.text[:200]
+    assigned_user = assigned.json()
+    assert assigned_user["role"] == "waiter"
+    assert assigned_user["custom_role_id"] == custom_role["id"]
+    assert set(assigned_user["permissions"]) == {"orders.view", "orders.create"}
+    assigned_login = requests.post(f"{API}/auth/login", timeout=20, json={
+        "email": assigned_user["email"], "password": "password-1",
+    })
+    assert assigned_login.status_code == 200, assigned_login.text[:200]
+    assert assigned_login.json()["user"]["custom_role_name"] == "Garçom"
+
+    edited_role = requests.put(
+        f"{API}/users/custom-roles/{custom_role['id']}", headers=headers_a, timeout=20,
+        json={"name": "Garçom salão", "permissions": ["orders.view"]},
+    )
+    assert edited_role.status_code == 200, edited_role.text[:200]
+    listed_user = next(item for item in requests.get(f"{API}/users", headers=headers_a, timeout=20).json()
+                       if item["id"] == assigned_user["id"])
+    assert set(listed_user["permissions"]) == {"orders.view", "orders.create"}
+    assert requests.delete(
+        f"{API}/users/custom-roles/{custom_role['id']}", headers=headers_a, timeout=20,
+    ).status_code == 409
+
+    detached = requests.put(f"{API}/users/{assigned_user['id']}", headers=headers_a, timeout=20, json={
+        "name": "Assigned role", "role": "waiter", "custom_role_id": None,
+        "active": True, "permissions": ["orders.view"],
+    })
+    assert detached.status_code == 200, detached.text[:200]
+    assert detached.json()["custom_role_id"] is None
+    assert requests.delete(
+        f"{API}/users/custom-roles/{custom_role['id']}", headers=headers_a, timeout=20,
+    ).status_code == 204

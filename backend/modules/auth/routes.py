@@ -31,6 +31,8 @@ class UserPublic(BaseModel):
     email: EmailStr
     name: str
     role: UserRole
+    custom_role_id: Optional[str] = None
+    custom_role_name: Optional[str] = None
     permissions: list[str] = Field(default_factory=list)
     restaurant_id: str
     must_change_password: bool = False
@@ -88,14 +90,27 @@ async def login(payload: LoginInput, request: Request):
     user.setdefault("active", True)
     user.setdefault("must_change_password", False)
     user["permissions"] = effective_permissions(user)
+    if user.get("custom_role_id"):
+        custom_role = await db.custom_roles.find_one(
+            {"id": user["custom_role_id"], "restaurant_id": user["restaurant_id"]},
+            {"_id": 0, "name": 1},
+        )
+        user["custom_role_name"] = custom_role.get("name") if custom_role else None
     return LoginResponse(token=token, user=UserPublic(**user))
 
 
 @router.get("/me", response_model=UserPublic)
 async def me(user: dict = Depends(get_current_user)):
+    db = get_db()
     user.setdefault("active", True)
     user.setdefault("must_change_password", False)
     user["permissions"] = effective_permissions(user)
+    if user.get("custom_role_id"):
+        custom_role = await db.custom_roles.find_one(
+            {"id": user["custom_role_id"], "restaurant_id": user["restaurant_id"]},
+            {"_id": 0, "name": 1},
+        )
+        user["custom_role_name"] = custom_role.get("name") if custom_role else None
     return UserPublic(**user)
 
 

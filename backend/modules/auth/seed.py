@@ -56,6 +56,8 @@ async def ensure_indexes() -> None:
         unique=True,
         partialFilterExpression={"hub_user_id": {"$exists": True}},
     )
+    await db.custom_roles.create_index([("restaurant_id", 1), ("id", 1)], unique=True)
+    await db.custom_roles.create_index([("restaurant_id", 1), ("name_key", 1)], unique=True)
     await db.restaurants.create_index("id", unique=True)
     await db.restaurants.create_index(
         "hub_tenant_id",

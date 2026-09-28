@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Pencil, KeyRound, ShieldCheck, Users } from "lucide-react";
+import { Plus, Pencil, KeyRound, ShieldCheck, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +23,8 @@ import { hasPermission } from "@/lib/permissions";
 
 const ROLE_LABEL = { admin: "Administrador", manager: "Gerente", waiter: "Atendimento", kitchen: "Cozinha" };
 const ROLES = ["admin", "manager", "waiter", "kitchen"];
-const emptyCreate = { name: "", email: "", temp_password: "", role: "waiter", permissions: [], require_password_change: false };
+const emptyCreate = { name: "", email: "", temp_password: "", role: "waiter", custom_role_id: null, permissions: [], require_password_change: false };
+const emptyCustomRole = { name: "", permissions: [] };
 
 export default function UsersPage() {
   useDocumentTitle("Usuários");
@@ -32,24 +33,31 @@ export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [permissionGroups, setPermissionGroups] = useState([]);
   const [presets, setPresets] = useState({});
+  const [customRoles, setCustomRoles] = useState([]);
   const [openCreate, setOpenCreate] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
   const [openReset, setOpenReset] = useState(false);
+  const [openManageRoles, setOpenManageRoles] = useState(false);
+  const [openCustomRole, setOpenCustomRole] = useState(false);
   const [target, setTarget] = useState(null);
   const [createForm, setCreateForm] = useState(emptyCreate);
-  const [editForm, setEditForm] = useState({ name: "", role: "waiter", active: true, permissions: [] });
+  const [editForm, setEditForm] = useState({ name: "", role: "waiter", custom_role_id: null, active: true, permissions: [] });
+  const [customRoleTarget, setCustomRoleTarget] = useState(null);
+  const [customRoleApplyTo, setCustomRoleApplyTo] = useState(null);
+  const [customRoleForm, setCustomRoleForm] = useState(emptyCustomRole);
   const [tempPw, setTempPw] = useState("");
   const [requirePasswordChange, setRequirePasswordChange] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
     try {
-      const [usersResponse, permissionsResponse] = await Promise.all([
-        api.get("/users"), api.get("/users/permissions"),
+      const [usersResponse, permissionsResponse, customRolesResponse] = await Promise.all([
+        api.get("/users"), api.get("/users/permissions"), api.get("/users/custom-roles"),
       ]);
       setUsers(usersResponse.data);
       setPermissionGroups(permissionsResponse.data.groups);
       setPresets(permissionsResponse.data.presets);
+      setCustomRoles(customRolesResponse.data);
     } catch (e) { toast.error(formatApiError(e)); }
   };
   useEffect(() => { load(); }, []);
@@ -61,8 +69,59 @@ export default function UsersPage() {
     setOpenCreate(true);
   };
 
-  const applyRolePreset = (form, setForm, role) => {
-    setForm({ ...form, role, permissions: [...(presets[role] || [])] });
+  const applyRolePreset = (form, setForm, value, applyTo) => {
+    if (value === "__create__") {
+      setCustomRoleTarget(null);
+      setCustomRoleApplyTo(applyTo);
+      setCustomRoleForm(emptyCustomRole);
+      setOpenCustomRole(true);
+      return;
+    }
+    if (value.startsWith("custom:")) {
+      const customRole = customRoles.find((item) => item.id === value.slice(7));
+      if (customRole) setForm({ ...form, role: "waiter", custom_role_id: customRole.id, permissions: [...customRole.permissions] });
+      return;
+    }
+    const role = value.replace(/^builtin:/, "");
+    setForm({ ...form, role, custom_role_id: null, permissions: [...(presets[role] || [])] });
+  };
+
+  const roleValue = (form) => form.custom_role_id ? `custom:${form.custom_role_id}` : `builtin:${form.role}`;
+
+  const saveCustomRole = async () => {
+    setSaving(true);
+    try {
+      const request = customRoleTarget
+        ? api.put(`/users/custom-roles/${customRoleTarget.id}`, customRoleForm)
+        : api.post("/users/custom-roles", customRoleForm);
+      const { data } = await request;
+      if (customRoleApplyTo === "create") {
+        setCreateForm((current) => ({ ...current, role: "waiter", custom_role_id: data.id, permissions: [...data.permissions] }));
+      } else if (customRoleApplyTo === "edit") {
+        setEditForm((current) => ({ ...current, role: "waiter", custom_role_id: data.id, permissions: [...data.permissions] }));
+      }
+      toast.success(customRoleTarget ? "Cargo atualizado" : "Cargo criado");
+      setOpenCustomRole(false);
+      setCustomRoleTarget(null);
+      setCustomRoleApplyTo(null);
+      await load();
+    } catch (e) { toast.error(formatApiError(e)); } finally { setSaving(false); }
+  };
+
+  const editCustomRole = (role) => {
+    setOpenManageRoles(false);
+    setCustomRoleTarget(role);
+    setCustomRoleApplyTo(null);
+    setCustomRoleForm({ name: role.name, permissions: [...role.permissions] });
+    setOpenCustomRole(true);
+  };
+
+  const deleteCustomRole = async (role) => {
+    try {
+      await api.delete(`/users/custom-roles/${role.id}`);
+      toast.success("Cargo excluído");
+      load();
+    } catch (e) { toast.error(formatApiError(e)); }
   };
 
   const togglePermission = (form, setForm, permission, checked) => {
@@ -139,10 +198,10 @@ export default function UsersPage() {
                   <span className="flex items-center gap-2">{u.name}{u.must_change_password && <span title="Senha temporária" className="text-amber-600"><ShieldCheck className="w-3.5 h-3.5" /></span>}</span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
-                <td className="px-4 py-3 text-foreground">{ROLE_LABEL[u.role]}</td>
+                <td className="px-4 py-3 text-foreground">{customRoles.find((role) => role.id === u.custom_role_id)?.name || ROLE_LABEL[u.role]}</td>
                 <td className="px-4 py-3"><ActivePill active={u.active} /></td>
                 <td className="px-4 py-3">
-                  {canManage && <><button onClick={() => { setTarget(u); setEditForm({ name: u.name, role: u.role, active: u.active, permissions: [...u.permissions] }); setOpenEdit(true); }} data-testid={`edit-user-${u.id}`} className="p-1.5 rounded hover:bg-muted text-muted-foreground" title="Editar"><Pencil className="w-4 h-4" /></button>
+                  {canManage && <><button onClick={() => { setTarget(u); setEditForm({ name: u.name, role: u.role, custom_role_id: u.custom_role_id || null, active: u.active, permissions: [...u.permissions] }); setOpenEdit(true); }} data-testid={`edit-user-${u.id}`} className="p-1.5 rounded hover:bg-muted text-muted-foreground" title="Editar"><Pencil className="w-4 h-4" /></button>
                   <button onClick={() => { setTarget(u); setTempPw(""); setRequirePasswordChange(false); setOpenReset(true); }} data-testid={`reset-user-${u.id}`} className="p-1.5 rounded hover:bg-muted text-muted-foreground ml-1" title="Redefinir senha"><KeyRound className="w-4 h-4" /></button></>}
                 </td>
               </tr>
@@ -160,10 +219,11 @@ export default function UsersPage() {
             <div><Label>Email</Label><Input type="email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} data-testid="user-email-input" /></div>
             <div><Label>Senha</Label><Input type="text" value={createForm.temp_password} onChange={(e) => setCreateForm({ ...createForm, temp_password: e.target.value })} placeholder="Mínimo 6 caracteres" data-testid="user-password-input" /></div>
             <div><Label>Cargo</Label>
-              <Select value={createForm.role} onValueChange={(v) => applyRolePreset(createForm, setCreateForm, v)}>
+              <Select value={roleValue(createForm)} onValueChange={(v) => applyRolePreset(createForm, setCreateForm, v, "create")}>
                 <SelectTrigger className="mt-1.5" data-testid="user-role-select"><SelectValue /></SelectTrigger>
-                <SelectContent>{ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABEL[r]}</SelectItem>)}</SelectContent>
+                <RoleOptions customRoles={customRoles} canManage={canManage} />
               </Select>
+              {canManage && customRoles.length > 0 && <button type="button" onClick={() => setOpenManageRoles(true)} className="mt-1 text-xs text-primary hover:underline">Gerenciar cargos personalizados</button>}
             </div>
             <PermissionsEditor groups={permissionGroups} permissions={createForm.permissions}
               onChange={(permission, checked) => togglePermission(createForm, setCreateForm, permission, checked)} />
@@ -187,10 +247,11 @@ export default function UsersPage() {
           <div className="space-y-3">
             <div><Label>Nome</Label><Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></div>
             <div><Label>Cargo</Label>
-              <Select value={editForm.role} onValueChange={(v) => applyRolePreset(editForm, setEditForm, v)}>
+              <Select value={roleValue(editForm)} onValueChange={(v) => applyRolePreset(editForm, setEditForm, v, "edit")}>
                 <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                <SelectContent>{ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABEL[r]}</SelectItem>)}</SelectContent>
+                <RoleOptions customRoles={customRoles} canManage={canManage} />
               </Select>
+              {canManage && customRoles.length > 0 && <button type="button" onClick={() => setOpenManageRoles(true)} className="mt-1 text-xs text-primary hover:underline">Gerenciar cargos personalizados</button>}
             </div>
             <PermissionsEditor groups={permissionGroups} permissions={editForm.permissions}
               onChange={(permission, checked) => togglePermission(editForm, setEditForm, permission, checked)} />
@@ -222,8 +283,48 @@ export default function UsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={openManageRoles} onOpenChange={setOpenManageRoles}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Cargos personalizados</DialogTitle></DialogHeader>
+          <div className="space-y-2">
+            {customRoles.map((role) => <div key={role.id} className="flex items-center gap-2 rounded-md border p-3">
+              <span className="flex-1 font-medium text-sm">{role.name}</span>
+              <button type="button" onClick={() => editCustomRole(role)} className="p-1.5 rounded hover:bg-muted text-muted-foreground" title="Editar cargo"><Pencil className="w-4 h-4" /></button>
+              <button type="button" onClick={() => deleteCustomRole(role)} className="p-1.5 rounded hover:bg-muted text-destructive" title="Excluir cargo"><Trash2 className="w-4 h-4" /></button>
+            </div>)}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenManageRoles(false)}>Fechar</Button>
+            <Button onClick={() => { setOpenManageRoles(false); setCustomRoleTarget(null); setCustomRoleApplyTo(null); setCustomRoleForm(emptyCustomRole); setOpenCustomRole(true); }}><Plus className="w-4 h-4 mr-1.5" /> Criar cargo</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={openCustomRole} onOpenChange={setOpenCustomRole}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{customRoleTarget ? "Editar cargo" : "Criar cargo"}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label>Nome do cargo</Label><Input value={customRoleForm.name} onChange={(e) => setCustomRoleForm({ ...customRoleForm, name: e.target.value })} placeholder="Ex.: Garçom" /></div>
+            <PermissionsEditor groups={permissionGroups} permissions={customRoleForm.permissions}
+              onChange={(permission, checked) => togglePermission(customRoleForm, setCustomRoleForm, permission, checked)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenCustomRole(false)}>Cancelar</Button>
+            <Button onClick={saveCustomRole} disabled={saving || !customRoleForm.name.trim()}>{saving ? "Salvando..." : "Salvar cargo"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+function RoleOptions({ customRoles, canManage }) {
+  return <SelectContent>
+    {ROLES.map((role) => <SelectItem key={role} value={`builtin:${role}`}>{ROLE_LABEL[role]}</SelectItem>)}
+    {customRoles.map((role) => <SelectItem key={role.id} value={`custom:${role.id}`}>{role.name}</SelectItem>)}
+    {canManage && <SelectItem value="__create__">+ Criar cargo</SelectItem>}
+  </SelectContent>;
 }
 
 function PermissionsEditor({ groups, permissions, onChange }) {
