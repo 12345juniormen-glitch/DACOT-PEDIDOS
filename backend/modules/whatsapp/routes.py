@@ -1,22 +1,30 @@
-"""Meta Cloud API webhook and tenant-scoped operator inbox."""
+"""Tenant-scoped WhatsApp inbox and provider-neutral event ingestion."""
 import json
-import os
+import re
 import uuid
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from core.db import get_db
 from core.deps import Tenant, require_roles
 from modules.customers.routes import CustomerInput, _normalize_phone, create_customer
-from modules.whatsapp.service import in_service_window, send_text, settings, tenant_for_phone, verify_signature
+from modules.whatsapp.provider import (
+    connect as provider_connect,
+    connection_status,
+    disconnect as provider_disconnect,
+    send_text,
+    verify_provider_signature,
+)
+from modules.whatsapp.service import get_auto_message_settings
 
 
 router = APIRouter(prefix="/whatsapp", tags=["whatsapp"])
-webhook_router = APIRouter(prefix="/whatsapp/webhook", tags=["whatsapp-webhook"])
+provider_router = APIRouter(prefix="/whatsapp/provider", tags=["whatsapp-provider"])
 
 
 def _message_out(doc):
@@ -28,109 +36,115 @@ def _message_out(doc):
 def _conversation_out(doc):
     return {key: doc.get(key) for key in (
         "id", "phone", "profile_name", "customer_id", "last_inbound_at", "last_message_at", "unread", "order_updates_opt_in"
-    )} | {"can_reply": in_service_window(doc)}
+    )} | {"can_reply": True}
 
 
-@webhook_router.get("", response_class=PlainTextResponse)
-async def verify_webhook(
-    mode: str = Query("", alias="hub.mode"),
-    token: str = Query("", alias="hub.verify_token"),
-    challenge: str = Query("", alias="hub.challenge"),
+class ProviderEvent(BaseModel):
+    event: Literal["message.received", "message.status"]
+    restaurant_id: str = Field(min_length=1, max_length=120)
+    external_id: str = Field(min_length=1, max_length=300)
+    phone: str | None = Field(default=None, max_length=30)
+    profile_name: str | None = Field(default=None, max_length=120)
+    message_type: str | None = Field(default=None, max_length=40)
+    text: str | None = Field(default=None, max_length=4096)
+    status: Literal["sent", "delivered", "read", "failed"] | None = None
+    timestamp: datetime | None = None
+
+
+@provider_router.post("/events")
+async def receive_provider_event(
+    request: Request,
+    signature: str | None = Header(None, alias="X-Dacot-Provider-Signature"),
 ):
-    expected = os.environ.get("WHATSAPP_VERIFY_TOKEN", "")
-    if not expected or mode != "subscribe" or token != expected:
-        raise HTTPException(403, "Verificação recusada")
-    return challenge
-
-
-@webhook_router.post("")
-async def receive_webhook(request: Request, signature: str | None = Header(None, alias="X-Hub-Signature-256")):
     body = await request.body()
     if len(body) > 256_000:
-        raise HTTPException(413, "Webhook grande demais")
-    verify_signature(body, signature)
+        raise HTTPException(413, "Evento grande demais")
+    verify_provider_signature(body, signature)
     try:
-        payload = json.loads(body)
-    except ValueError:
-        raise HTTPException(400, "Webhook inválido")
-    if payload.get("object") != "whatsapp_business_account":
-        raise HTTPException(400, "Objeto inesperado")
+        event = ProviderEvent.model_validate(json.loads(body))
+    except (ValueError, TypeError, ValidationError):
+        raise HTTPException(400, "Evento inválido")
+
     db = get_db()
-    for entry in payload.get("entry", []):
-        for change in entry.get("changes", []):
-            if change.get("field") != "messages":
-                continue
-            value = change.get("value", {})
-            restaurant_id = tenant_for_phone(value.get("metadata", {}).get("phone_number_id"))
-            if not restaurant_id:
-                # A signed event for an unconfigured number is never assigned to a tenant.
-                continue
-            profiles = {c.get("wa_id"): c.get("profile", {}).get("name", "")[:120]
-                        for c in value.get("contacts", [])}
-            for message in value.get("messages", []):
-                external_id = message.get("id")
-                phone = _normalize_phone(message.get("from", ""))
-                if not external_id or not 8 <= len(phone) <= 15:
-                    continue
-                now = datetime.now(timezone.utc).isoformat()
-                try:
-                    at = datetime.fromtimestamp(int(message.get("timestamp", 0)), timezone.utc).isoformat()
-                except (ValueError, TypeError, OverflowError):
-                    at = now
-                if at > now:
-                    at = now
-                customer = await db.customers.find_one({
-                    "restaurant_id": restaurant_id, "normalized_phone": phone,
-                }, {"id": 1})
-                conversation = await db.wa_conversations.find_one_and_update(
-                    {"restaurant_id": restaurant_id, "phone": phone},
-                    {"$setOnInsert": {"id": str(uuid.uuid4()), "restaurant_id": restaurant_id,
-                                      "phone": phone, "unread": 0, "created_at": now}},
-                    upsert=True, return_document=True,
-                )
-                kind = message.get("type", "unsupported")
-                supported = kind == "text"
-                doc = {"id": str(uuid.uuid4()), "restaurant_id": restaurant_id,
-                       "conversation_id": conversation["id"], "direction": "inbound",
-                       "external_id": external_id, "type": kind if supported else "unsupported",
-                       "text": message.get("text", {}).get("body", "")[:4096] if supported else None,
-                       "status": "received", "created_at": at}
-                try:
-                    await db.wa_messages.insert_one(doc)
-                except DuplicateKeyError:
-                    continue
-                changes = {"$max": {"last_inbound_at": at, "last_message_at": at},
-                           "$inc": {"unread": 1}}
-                fields = {}
-                if profiles.get(message.get("from")):
-                    fields["profile_name"] = profiles[message["from"]]
-                if customer:
-                    fields["customer_id"] = customer["id"]
-                if fields:
-                    changes["$set"] = fields
-                await db.wa_conversations.update_one(
-                    {"restaurant_id": restaurant_id, "id": conversation["id"]}, changes,
-                )
-            for event in value.get("statuses", []):
-                external_id, state = event.get("id"), event.get("status")
-                if external_id and state in {"sent", "delivered", "read", "failed"}:
-                    rank = {"sent": 1, "delivered": 2, "read": 3, "failed": 3}
-                    current = await db.wa_messages.find_one({
-                        "restaurant_id": restaurant_id, "external_id": external_id, "direction": "outbound",
-                    }, {"status": 1})
-                    if current and rank.get(current.get("status"), 0) <= rank[state]:
-                        await db.wa_messages.update_one(
-                            {"restaurant_id": restaurant_id, "external_id": external_id,
-                             "direction": "outbound", "status": current.get("status")},
-                            {"$set": {"status": state}},
-                        )
+    if await db.restaurants.find_one({"id": event.restaurant_id}, {"_id": 1}) is None:
+        raise HTTPException(404, "Restaurante não encontrado")
+
+    if event.event == "message.status":
+        if not event.status:
+            raise HTTPException(400, "Status ausente")
+        rank = {"sent": 1, "delivered": 2, "read": 3, "failed": 3}
+        current = await db.wa_messages.find_one({
+            "restaurant_id": event.restaurant_id,
+            "external_id": event.external_id,
+            "direction": "outbound",
+        }, {"status": 1})
+        if current and rank.get(current.get("status"), 0) <= rank[event.status]:
+            await db.wa_messages.update_one(
+                {"restaurant_id": event.restaurant_id, "external_id": event.external_id,
+                 "direction": "outbound", "status": current.get("status")},
+                {"$set": {"status": event.status}},
+            )
+        return {"ok": True}
+
+    phone = _normalize_phone(event.phone or "")
+    if not 8 <= len(phone) <= 15:
+        raise HTTPException(400, "Telefone inválido")
+    now = datetime.now(timezone.utc)
+    at = event.timestamp.astimezone(timezone.utc) if event.timestamp else now
+    if at > now:
+        at = now
+    at_iso, now_iso = at.isoformat(), now.isoformat()
+    customer = await db.customers.find_one({
+        "restaurant_id": event.restaurant_id, "normalized_phone": phone,
+    }, {"id": 1})
+    conversation = await db.wa_conversations.find_one_and_update(
+        {"restaurant_id": event.restaurant_id, "phone": phone},
+        {"$setOnInsert": {"id": str(uuid.uuid4()), "restaurant_id": event.restaurant_id,
+                          "phone": phone, "unread": 0, "created_at": now_iso}},
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
+    supported = event.message_type == "text"
+    doc = {
+        "id": str(uuid.uuid4()), "restaurant_id": event.restaurant_id,
+        "conversation_id": conversation["id"], "direction": "inbound",
+        "external_id": event.external_id, "type": "text" if supported else "unsupported",
+        "text": event.text if supported else None, "status": "received", "created_at": at_iso,
+    }
+    try:
+        await db.wa_messages.insert_one(doc)
+    except DuplicateKeyError:
+        return {"ok": True}
+    changes = {"$max": {"last_inbound_at": at_iso, "last_message_at": at_iso}, "$inc": {"unread": 1}}
+    fields = {}
+    if event.profile_name:
+        fields["profile_name"] = event.profile_name
+    if customer:
+        fields["customer_id"] = customer["id"]
+    if fields:
+        changes["$set"] = fields
+    await db.wa_conversations.update_one(
+        {"restaurant_id": event.restaurant_id, "id": conversation["id"]}, changes,
+    )
     return {"ok": True}
 
 
 @router.get("/config")
-async def config_state(tenant: Tenant = Depends(require_roles("admin", "manager"))):
-    config = settings().get(tenant.restaurant_id)
-    return {"connected": bool(config), "phone_number_id": config["phone_number_id"] if config else None}
+async def config_state(tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
+    state = await connection_status(tenant.restaurant_id)
+    if tenant.role == "waiter":
+        state.pop("qr_data_url", None)
+    return state
+
+
+@router.post("/connect")
+async def connect_whatsapp(tenant: Tenant = Depends(require_roles("admin", "manager"))):
+    return await provider_connect(tenant.restaurant_id)
+
+
+@router.delete("/connection")
+async def disconnect_whatsapp(tenant: Tenant = Depends(require_roles("admin", "manager"))):
+    return await provider_disconnect(tenant.restaurant_id)
 
 
 @router.get("/conversations")
@@ -177,6 +191,50 @@ async def mark_read(conversation_id: str, tenant: Tenant = Depends(require_roles
 
 class ConsentInput(BaseModel):
     allowed: bool
+
+
+class AutoMessageSetting(BaseModel):
+    enabled: bool
+    message: str = Field(max_length=1000)
+
+
+class AutoMessagesInput(BaseModel):
+    received: AutoMessageSetting
+    in_preparation: AutoMessageSetting
+    ready: AutoMessageSetting
+    delivered: AutoMessageSetting
+    cancelled: AutoMessageSetting
+
+
+ALLOWED_TEMPLATE_VARIABLES = {"cliente", "pedido", "restaurante"}
+
+
+@router.get("/auto-messages")
+async def auto_messages(tenant: Tenant = Depends(require_roles("admin", "manager"))):
+    return await get_auto_message_settings(get_db(), tenant.restaurant_id)
+
+
+@router.put("/auto-messages")
+async def update_auto_messages(
+    payload: AutoMessagesInput,
+    tenant: Tenant = Depends(require_roles("admin", "manager")),
+):
+    messages = payload.model_dump()
+    for setting in messages.values():
+        if setting["enabled"] and not setting["message"].strip():
+            raise HTTPException(422, "Mensagem ativa não pode ficar vazia")
+        variables = {item.strip() for item in re.findall(r"{{\s*([^{}]+?)\s*}}", setting["message"])}
+        unsupported = variables - ALLOWED_TEMPLATE_VARIABLES
+        if unsupported:
+            raise HTTPException(422, f"Variáveis não suportadas: {', '.join(sorted(unsupported))}")
+    now = datetime.now(timezone.utc).isoformat()
+    await get_db().wa_auto_messages.replace_one(
+        {"_id": tenant.restaurant_id, "restaurant_id": tenant.restaurant_id},
+        {"_id": tenant.restaurant_id, "restaurant_id": tenant.restaurant_id,
+         "messages": messages, "updated_at": now, "updated_by": tenant.user_id},
+        upsert=True,
+    )
+    return messages
 
 
 @router.post("/conversations/{conversation_id}/order-updates-consent")
@@ -245,8 +303,6 @@ class SendInput(BaseModel):
 async def reply(conversation_id: str, payload: SendInput,
                 tenant: Tenant = Depends(require_roles("admin", "manager", "waiter"))):
     conversation = await _conversation(tenant, conversation_id)
-    if not in_service_window(conversation):
-        raise HTTPException(409, "Janela de atendimento encerrada; é necessário template aprovado")
     external_id = await send_text(tenant.restaurant_id, conversation["phone"], payload.text)
     now = datetime.now(timezone.utc).isoformat()
     doc = {"id": str(uuid.uuid4()), "restaurant_id": tenant.restaurant_id,
@@ -256,7 +312,7 @@ async def reply(conversation_id: str, payload: SendInput,
     try:
         await get_db().wa_messages.insert_one(doc)
     except DuplicateKeyError:
-        raise HTTPException(502, "Confirmação duplicada da API externa")
+        raise HTTPException(502, "Confirmação duplicada do provider")
     await get_db().wa_conversations.update_one(
         {"restaurant_id": tenant.restaurant_id, "id": conversation_id},
         {"$max": {"last_message_at": now}},

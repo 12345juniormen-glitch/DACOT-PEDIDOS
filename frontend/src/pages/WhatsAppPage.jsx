@@ -1,16 +1,29 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/PageHeader";
 import { api, formatApiError } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
+
+const AUTO_MESSAGE_LABELS = {
+  received: "Pedido recebido",
+  in_preparation: "Em preparo",
+  ready: "Pronto",
+  delivered: "Entregue",
+  cancelled: "Cancelado",
+};
 
 export default function WhatsAppPage() {
   useDocumentTitle("WhatsApp");
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [conversations, setConversations] = useState([]);
   const [selected, setSelected] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -18,7 +31,36 @@ export default function WhatsAppPage() {
   const [pages, setPages] = useState(0);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [autoMessages, setAutoMessages] = useState(null);
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [connection, setConnection] = useState({ state: "loading", connected: false, qr_data_url: null });
   const selectedId = selected?.id;
+  const canManageConnection = ["admin", "manager"].includes(user?.role);
+
+  useEffect(() => {
+    if (!canManageConnection) return;
+    let active = true;
+    api.get("/whatsapp/auto-messages")
+      .then(({ data }) => { if (active) setAutoMessages(data); })
+      .catch((e) => { if (active) toast.error(formatApiError(e)); });
+    return () => { active = false; };
+  }, [canManageConnection]);
+
+  const loadConnection = useCallback(async (quiet = true) => {
+    try {
+      const { data } = await api.get("/whatsapp/config");
+      setConnection(data);
+    } catch (e) {
+      setConnection({ state: "unavailable", connected: false, qr_data_url: null });
+      if (!quiet) toast.error(formatApiError(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    loadConnection(false);
+    const timer = setInterval(() => loadConnection(true), 3000);
+    return () => clearInterval(timer);
+  }, [loadConnection]);
 
   useEffect(() => {
     let active = true;
@@ -75,8 +117,105 @@ export default function WhatsAppPage() {
     } catch (e) { toast.error(formatApiError(e)); }
   };
 
+  const connect = async () => {
+    setBusy(true);
+    try {
+      const { data } = await api.post("/whatsapp/connect");
+      setConnection(data);
+    } catch (e) { toast.error(formatApiError(e)); }
+    finally { setBusy(false); }
+  };
+
+  const disconnect = async () => {
+    if (!window.confirm("Desconectar este WhatsApp do restaurante? Será necessário ler um novo QR Code para reconectar.")) return;
+    setBusy(true);
+    try {
+      const { data } = await api.delete("/whatsapp/connection");
+      setConnection(data);
+      toast.success("WhatsApp desconectado");
+    } catch (e) { toast.error(formatApiError(e)); }
+    finally { setBusy(false); }
+  };
+
+  const updateAutoMessage = (status, changes) => {
+    setAutoMessages((current) => ({
+      ...current,
+      [status]: { ...current[status], ...changes },
+    }));
+  };
+
+  const saveAutoMessages = async () => {
+    setSettingsBusy(true);
+    try {
+      const { data } = await api.put("/whatsapp/auto-messages", autoMessages);
+      setAutoMessages(data);
+      toast.success("Mensagens automáticas salvas");
+    } catch (e) { toast.error(formatApiError(e)); }
+    finally { setSettingsBusy(false); }
+  };
+
+  const connectionLabel = {
+    loading: "Verificando", connecting: "Conectando", waiting_qr: "Aguardando QR",
+    reconnecting: "Reconectando", connected: "Conectado", disconnected: "Desconectado",
+    unavailable: "Indisponível",
+  }[connection.state] || "Desconectado";
+
   return <div className="p-4 sm:p-6 lg:p-8 max-w-[1500px] mx-auto">
     <PageHeader title="WhatsApp" subtitle="Atendimento de pedidos" />
+    <section className="rounded-lg border bg-card p-4 mb-3 flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h2 className="font-semibold">Conexão do restaurante</h2>
+          <Badge variant={connection.connected ? "default" : "outline"}>{connectionLabel}</Badge>
+        </div>
+        <p className="text-sm text-muted-foreground mt-1">
+          {connection.connected
+            ? `WhatsApp vinculado${connection.phone ? ` · ${connection.phone}` : ""}`
+            : connection.state === "waiting_qr" ? "Abra Aparelhos conectados no WhatsApp e leia o código abaixo." : "Conecte um WhatsApp para receber e responder mensagens."}
+        </p>
+      </div>
+      {canManageConnection && <div className="flex gap-2 shrink-0">
+        {!connection.connected && connection.state !== "waiting_qr" && connection.state !== "connecting" &&
+          <Button onClick={connect} disabled={busy}>Conectar WhatsApp</Button>}
+        {(connection.connected || connection.state === "waiting_qr" || connection.state === "connecting" || connection.state === "reconnecting") &&
+          <Button variant="outline" onClick={disconnect} disabled={busy}>Desconectar</Button>}
+      </div>}
+    </section>
+    {canManageConnection && connection.state === "waiting_qr" && connection.qr_data_url &&
+      <section className="rounded-lg border bg-card p-4 mb-3 text-center">
+        <img src={connection.qr_data_url} alt="QR Code para conectar o WhatsApp" className="w-64 h-64 max-w-full mx-auto rounded-md bg-white p-2" />
+        <p className="text-xs text-muted-foreground mt-2">O código é temporário e será renovado automaticamente.</p>
+      </section>}
+    {canManageConnection && autoMessages && <section className="rounded-lg border bg-card p-4 mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+        <div>
+          <h2 className="font-semibold">Mensagens automáticas do pedido</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Personalize os avisos enviados aos clientes que autorizaram atualizações.
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Variáveis disponíveis: {"{{cliente}}"}, {"{{pedido}}"} e {"{{restaurante}}"}.
+          </p>
+        </div>
+        <Button className="shrink-0" onClick={saveAutoMessages} disabled={settingsBusy}>
+          {settingsBusy ? "Salvando…" : "Salvar mensagens"}
+        </Button>
+      </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+        {Object.entries(AUTO_MESSAGE_LABELS).map(([status, label]) => <div key={status} className="rounded-md border p-3">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <label htmlFor={`auto-message-${status}`} className="font-medium text-sm">{label}</label>
+            <Switch id={`auto-message-${status}`} checked={autoMessages[status].enabled}
+              onCheckedChange={(enabled) => updateAutoMessage(status, { enabled })}
+              aria-label={`Ativar mensagem automática: ${label}`} />
+          </div>
+          <Textarea rows={3} value={autoMessages[status].message}
+            onChange={(event) => updateAutoMessage(status, { message: event.target.value })}
+            disabled={!autoMessages[status].enabled} maxLength={1000}
+            aria-label={`Mensagem automática: ${label}`} />
+        </div>)}
+      </div>
+    </section>}
     <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_240px] gap-3">
       <section className="rounded-lg border bg-card p-3 max-h-[70vh] overflow-y-auto">
         <h2 className="font-semibold mb-2">Conversas</h2>
@@ -98,7 +237,7 @@ export default function WhatsAppPage() {
               <div className="text-[11px] text-muted-foreground mt-1">{formatDateTime(message.created_at)} · {message.status}</div>
             </div>)}
           </div>
-          <div className="flex gap-2 mt-3"><Input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} placeholder={selected.can_reply ? "Responder…" : "Janela encerrada; requer template aprovado"} disabled={!selected.can_reply || busy} /><Button disabled={!selected.can_reply || busy || !draft.trim()} onClick={send}>Enviar</Button></div>
+          <div className="flex gap-2 mt-3"><Input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} placeholder={connection.connected ? "Responder…" : "Conecte o WhatsApp para responder"} disabled={!connection.connected || busy} /><Button disabled={!connection.connected || busy || !draft.trim()} onClick={send}>Enviar</Button></div>
         </>}
       </section>
       <section className="rounded-lg border bg-card p-3 sm:p-4 h-fit">

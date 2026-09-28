@@ -1,0 +1,19 @@
+{
+  "name": "dacot-whatsapp-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "mongodb": "7.6.0",
+    "pino": "10.3.1",
+    "qrcode": "1.5.4"
+  }
+}

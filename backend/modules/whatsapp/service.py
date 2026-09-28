@@ -1,88 +1,69 @@
-"""Small official Cloud API adapter; secrets live only in backend environment."""
-import hashlib
-import hmac
-import json
-import os
+"""Transport-independent WhatsApp domain services."""
 import re
-from datetime import datetime, timedelta, timezone
-
-import httpx
-from fastapi import HTTPException
+from datetime import datetime, timezone
 
 from core.db import get_db
-from modules.customers.routes import _normalize_phone
+from modules.whatsapp.provider import send_text
 
 
-def settings():
-    """One Meta app; per-restaurant phone IDs and access tokens."""
-    try:
-        entries = json.loads(os.environ.get("WHATSAPP_TENANTS_JSON", "[]"))
-        if not isinstance(entries, list):
-            raise ValueError
-        tenants = {}
-        phones = set()
-        for entry in entries:
-            tenant, phone, token = (entry[key] for key in ("restaurant_id", "phone_number_id", "access_token"))
-            if not all(isinstance(x, str) and x for x in (tenant, phone, token)) or tenant in tenants or phone in phones:
-                raise ValueError
-            tenants[tenant] = {"phone_number_id": phone, "access_token": token}
-            phones.add(phone)
-        return tenants
-    except (ValueError, TypeError, KeyError):
-        raise HTTPException(503, "Configuração WhatsApp inválida")
+DEFAULT_AUTO_MESSAGES = {
+    "received": {
+        "enabled": True,
+        "message": "Olá, {{cliente}}! Seu pedido {{pedido}} foi recebido por {{restaurante}}.",
+    },
+    "in_preparation": {
+        "enabled": True,
+        "message": "Olá, {{cliente}}! Seu pedido {{pedido}} está em preparo.",
+    },
+    "ready": {
+        "enabled": True,
+        "message": "Olá, {{cliente}}! Seu pedido {{pedido}} está pronto.",
+    },
+    "delivered": {
+        "enabled": True,
+        "message": "Olá, {{cliente}}! Seu pedido {{pedido}} foi entregue. Obrigado!",
+    },
+    "cancelled": {
+        "enabled": True,
+        "message": "Olá, {{cliente}}. Seu pedido {{pedido}} foi cancelado.",
+    },
+}
+
+EVENT_TO_SETTING = {
+    "created": "received",
+    "in_preparation": "in_preparation",
+    "ready": "ready",
+    "delivered": "delivered",
+    "cancelled": "cancelled",
+}
 
 
-def tenant_for_phone(phone_number_id):
-    for tenant, config in settings().items():
-        if config["phone_number_id"] == phone_number_id:
-            return tenant
-    return None
+async def get_auto_message_settings(db, restaurant_id: str) -> dict:
+    stored = await db.wa_auto_messages.find_one(
+        {"_id": restaurant_id, "restaurant_id": restaurant_id}, {"_id": 0, "messages": 1}
+    )
+    overrides = (stored or {}).get("messages", {})
+    return {
+        key: {**default, **overrides.get(key, {})}
+        for key, default in DEFAULT_AUTO_MESSAGES.items()
+    }
 
 
-def verify_signature(body: bytes, signature: str | None):
-    secret = os.environ.get("WHATSAPP_META_APP_SECRET", "")
-    if not secret or not signature or not signature.startswith("sha256="):
-        raise HTTPException(403, "Webhook não autenticado")
-    expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, signature):
-        raise HTTPException(403, "Webhook não autenticado")
-
-
-def in_service_window(conversation):
-    last = conversation.get("last_inbound_at")
-    if not last:
-        return False
-    try:
-        timestamp = datetime.fromisoformat(last)
-        if timestamp.tzinfo is None:
-            return False
-        age = datetime.now(timezone.utc) - timestamp.astimezone(timezone.utc)
-        return timedelta(0) <= age < timedelta(hours=24)
-    except ValueError:
-        return False
-
-
-async def send_text(restaurant_id: str, phone: str, text: str):
-    config = settings().get(restaurant_id)
-    version = os.environ.get("WHATSAPP_GRAPH_VERSION", "")
-    if not config or not re.fullmatch(r"v\d+\.\d+", version):
-        raise HTTPException(503, "WhatsApp não configurado")
-    url = f"https://graph.facebook.com/{version}/{config['phone_number_id']}/messages"
-    if os.environ.get("DACOT_LOCAL_INTEGRATION") == "1":
-        url = os.environ.get("WHATSAPP_TEST_GRAPH_URL", url).rstrip("/") + f"/{version}/{config['phone_number_id']}/messages"
-    payload = {"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"body": text}}
-    try:
-        async with httpx.AsyncClient(timeout=8) as client:
-            response = await client.post(url, json=payload, headers={"Authorization": f"Bearer {config['access_token']}"})
-        response.raise_for_status()
-        return response.json()["messages"][0]["id"]
-    except (httpx.HTTPError, KeyError, IndexError, ValueError):
-        # Never echo response bodies or request headers: they may contain secrets/PII.
-        raise HTTPException(502, "Falha ao enviar mensagem pelo WhatsApp")
+def render_order_message(template: str, order: dict, restaurant_name: str) -> str:
+    values = {
+        "cliente": order.get("customer_name") or "cliente",
+        "pedido": f"#{order['order_number']}",
+        "restaurante": restaurant_name or "restaurante",
+    }
+    return re.sub(
+        r"{{\s*(cliente|pedido|restaurante)\s*}}",
+        lambda match: str(values[match.group(1)]),
+        template,
+    )
 
 
 async def notify_order(order: dict, kind: str):
-    """Best-effort, one claim per order event; never blocks the order pipeline."""
+    """Best-effort, idempotent order notification; never blocks order flow."""
     if not order.get("customer_id"):
         return
     db = get_db()
@@ -90,6 +71,9 @@ async def notify_order(order: dict, kind: str):
         "restaurant_id": order["restaurant_id"], "customer_id": order["customer_id"],
     })
     if not conversation:
+        return
+    setting_key = EVENT_TO_SETTING.get(kind)
+    if not setting_key:
         return
     key = f"{order['id']}:{kind}:{order['updated_at']}"
     from pymongo.errors import DuplicateKeyError
@@ -101,20 +85,26 @@ async def notify_order(order: dict, kind: str):
         })
     except DuplicateKeyError:
         return
+    settings = await get_auto_message_settings(db, order["restaurant_id"])
+    setting = settings[setting_key]
+    if not setting["enabled"]:
+        await db.wa_notifications.update_one(
+            {"restaurant_id": order["restaurant_id"], "key": key},
+            {"$set": {"state": "skipped_disabled"}},
+        )
+        return
     if not conversation.get("order_updates_opt_in", False):
         await db.wa_notifications.update_one(
             {"restaurant_id": order["restaurant_id"], "key": key},
             {"$set": {"state": "skipped_no_consent"}},
         )
         return
-    if not in_service_window(conversation):
-        await db.wa_notifications.update_one(
-            {"restaurant_id": order["restaurant_id"], "key": key},
-            {"$set": {"state": "skipped_outside_window"}},
-        )
-        return
-    labels = {"created": "recebido", "in_preparation": "em preparo", "ready": "pronto", "delivered": "entregue", "cancelled": "cancelado"}
-    text = f"Pedido #{order['order_number']} {labels.get(kind, kind)}."
+    restaurant = await db.restaurants.find_one(
+        {"id": order["restaurant_id"]}, {"_id": 0, "name": 1}
+    )
+    text = render_order_message(
+        setting["message"], order, (restaurant or {}).get("name", "restaurante")
+    )
     try:
         external_id = await send_text(order["restaurant_id"], conversation["phone"], text)
         now = datetime.now(timezone.utc).isoformat()

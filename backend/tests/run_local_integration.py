@@ -8,6 +8,8 @@ test values, even if a local .env exists. Mongo data and logs are temporary.
 """
 
 import argparse
+import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -49,30 +51,80 @@ def free_port():
 
 
 class LocalHub(BaseHTTPRequestHandler):
+    def _body(self):
+        return self.rfile.read(int(self.headers.get("Content-Length", "0")))
+
+    def _json(self, status, payload):
+        body = json.dumps(payload).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _provider_authorized(self, body):
+        expected = "sha256=" + hmac.new(self.server.provider_secret.encode(), body, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, self.headers.get("X-Dacot-Provider-Signature", ""))
+
     def do_POST(self):
-        if not self.path.endswith("/messages") or not self.path.startswith("/v"):
-            self.send_error(404)
+        body = self._body()
+        parts = self.path.strip("/").split("/")
+        if (len(parts) == 7 and parts[:3] == ["api", "public", "tenants"]
+                and parts[4:] == ["modules", "orders", "access"]):
+            if self.headers.get("X-Module-Key") != self.server.module_key:
+                self.send_error(403)
+                return
+            tenant = parts[3]
+            self._json(200, {"active": tenant != "0" * 24})
             return
-        body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
-        if self.headers.get("Authorization") not in self.server.wa_tokens:
+        if self.path.startswith("/test/provider/"):
+            if self.headers.get("X-Test-Control") != self.server.test_control:
+                self.send_error(403)
+                return
+            tenant, state = self.path.removeprefix("/test/provider/").split("/", 1)
+            self.server.provider_sessions[tenant] = {
+                "state": state, "connected": state == "connected", "qr_data_url": None,
+                "phone": "5511999990000" if state == "connected" else None,
+            }
+            self._json(200, self.server.provider_sessions[tenant])
+            return
+        if not self._provider_authorized(body):
             self.send_error(403)
             return
+        if len(parts) != 3 or parts[0] != "sessions" or parts[2] not in {"connect", "messages"}:
+            self.send_error(404)
+            return
+        tenant, action = parts[1], parts[2]
         try:
             payload = json.loads(body)
         except ValueError:
             self.send_error(400)
             return
-        if payload.get("text", {}).get("body") == "FAIL" or str(payload.get("to", "")).endswith("0000"):
+        if action == "connect":
+            state = {"state": "waiting_qr", "connected": False,
+                     "qr_data_url": "data:image/png;base64,dGVzdA==", "phone": None}
+            self.server.provider_sessions[tenant] = state
+            self._json(200, state)
+            return
+        if not self.server.provider_sessions.get(tenant, {}).get("connected"):
+            self.send_error(409)
+            return
+        if payload.get("text") == "FAIL" or str(payload.get("to", "")).endswith("0000"):
             self.send_error(500)
             return
-        response = json.dumps({"messages": [{"id": "wamid." + uuid.uuid4().hex}]}).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(response)))
-        self.end_headers()
-        self.wfile.write(response)
+        self._json(201, {"external_id": "baileys." + uuid.uuid4().hex})
 
     def do_GET(self):
+        if self.path.startswith("/sessions/"):
+            body = b""
+            if not self._provider_authorized(body):
+                self.send_error(403)
+                return
+            tenant = self.path.removeprefix("/sessions/")
+            self._json(200, self.server.provider_sessions.get(tenant, {
+                "state": "disconnected", "connected": False, "qr_data_url": None, "phone": None,
+            }))
+            return
         if self.headers.get("X-Module-Key") != self.server.module_key:
             self.send_error(403)
             return
@@ -90,6 +142,16 @@ class LocalHub(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def do_DELETE(self):
+        body = self._body()
+        if not self._provider_authorized(body) or not self.path.startswith("/sessions/"):
+            self.send_error(403)
+            return
+        tenant = self.path.removeprefix("/sessions/")
+        state = {"state": "disconnected", "connected": False, "qr_data_url": None, "phone": None}
+        self.server.provider_sessions[tenant] = state
+        self._json(200, state)
 
     def log_message(self, *_args):
         pass
@@ -112,6 +174,7 @@ def main():
     parser.add_argument("--mongod", required=True, type=Path)
     parser.add_argument("--all", action="store_true", help="Run the full existing backend integration suite")
     parser.add_argument("--handoff-only", action="store_true", help="Run only concurrent handoff regression tests")
+    parser.add_argument("--whatsapp-only", action="store_true", help="Run only WhatsApp provider integration tests")
     parser.add_argument("--serial", action="store_true", help="Disable pytest-xdist for diagnosis of shared-fixture races")
     args = parser.parse_args()
     mongod = args.mongod.resolve(strict=True)
@@ -121,11 +184,13 @@ def main():
     mongo_port, hub_port, api_port = free_port(), free_port(), free_port()
     test_id = secrets.token_hex(8)
     module_key = secrets.token_urlsafe(32)
-    wa_token_1, wa_token_2 = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+    provider_secret = secrets.token_urlsafe(48)
+    test_control = secrets.token_urlsafe(32)
     env = os.environ.copy()
     env.update({
         "MONGO_URL": f"mongodb://127.0.0.1:{mongo_port}/?directConnection=true",
         "DB_NAME": f"dacot_integration_{test_id}",
+        "APP_ENV": "development",
         "JWT_SECRET": secrets.token_urlsafe(48),
         "HANDOFF_JWT_SECRET": secrets.token_urlsafe(48),
         "HANDOFF_ISSUER": "dacot-local-test",
@@ -139,14 +204,9 @@ def main():
         "DEFAULT_RESTAURANT_NAME": f"DACOT Integration {test_id}",
         "REACT_APP_BACKEND_URL": f"http://127.0.0.1:{api_port}",
         "DACOT_LOCAL_INTEGRATION": "1",
-        "WHATSAPP_VERIFY_TOKEN": secrets.token_urlsafe(32),
-        "WHATSAPP_META_APP_SECRET": secrets.token_urlsafe(32),
-        "WHATSAPP_GRAPH_VERSION": "v99.0",
-        "WHATSAPP_TEST_GRAPH_URL": f"http://127.0.0.1:{hub_port}",
-        "WHATSAPP_TENANTS_JSON": json.dumps([
-            {"restaurant_id": "wa-t1", "phone_number_id": "phone-wa-1", "access_token": wa_token_1},
-            {"restaurant_id": "wa-t2", "phone_number_id": "phone-wa-2", "access_token": wa_token_2},
-        ]),
+        "WHATSAPP_PROVIDER_URL": f"http://127.0.0.1:{hub_port}",
+        "WHATSAPP_PROVIDER_SECRET": provider_secret,
+        "WHATSAPP_TEST_CONTROL_SECRET": test_control,
         "SESSION_HOURS": "8",
         "JWT_EXPIRE_MINUTES": "720",
         "NO_PROXY": "127.0.0.1,localhost",
@@ -154,7 +214,12 @@ def main():
     })
     hub = ThreadingHTTPServer(("127.0.0.1", hub_port), LocalHub)
     hub.module_key = module_key
-    hub.wa_tokens = {f"Bearer {wa_token_1}", f"Bearer {wa_token_2}"}
+    hub.provider_secret = provider_secret
+    hub.test_control = test_control
+    hub.provider_sessions = {
+        tenant: {"state": "connected", "connected": True, "qr_data_url": None, "phone": "5511999990000"}
+        for tenant in ("wa-t1", "wa-t2")
+    }
     hub_thread = threading.Thread(target=hub.serve_forever, daemon=True)
     hub_thread.start()
 
@@ -179,9 +244,10 @@ def main():
                     cwd=BACKEND, env=env, stdout=api_log, stderr=subprocess.STDOUT,
                 )
                 wait_ready(lambda: urlopen(f"http://127.0.0.1:{api_port}/api/health", timeout=1).read(), api, "API")
-                print("Isolated MongoDB, local Hub stub and API ready on 127.0.0.1", flush=True)
+                print("Isolated MongoDB, local Hub/provider stub and API ready on 127.0.0.1", flush=True)
                 selected = (["tests/backend_test.py", "tests/test_contact_import.py", "tests/test_p0_local.py", "tests/test_handoff_concurrency.py", "tests/test_order_history_audit.py", "tests/test_whatsapp.py"]
-                            if args.all else ["tests/test_handoff_concurrency.py"] if args.handoff_only else TESTS)
+                            if args.all else ["tests/test_handoff_concurrency.py"] if args.handoff_only
+                            else ["tests/test_whatsapp.py"] if args.whatsapp_only else TESTS)
                 workers = ["-n", "0"] if args.serial else []
                 result = subprocess.run([sys.executable, "-m", "pytest", *selected, *workers, "-q", "-ra"], cwd=BACKEND, env=env)
                 return result.returncode
