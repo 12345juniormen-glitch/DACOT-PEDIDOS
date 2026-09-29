@@ -1,29 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus, RefreshCw, ChevronRight, Clock, ChefHat, ArrowRight, AlertTriangle } from "lucide-react";
+import { AlertTriangle, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/PageHeader";
-import { EmptyState } from "@/components/EmptyState";
 import { DashboardMetricDialog } from "@/components/DashboardMetricDialog";
-import { StatusBadge, STATUS_ICON } from "@/components/StatusBadge";
 import { api, formatApiError } from "@/lib/api";
-import { brl, formatTime, STATUS_LABEL, NEXT_STATUS } from "@/lib/format";
+import { brl, formatTime, NEXT_STATUS, STATUS_LABEL } from "@/lib/format";
 import { formatDurationMinutes } from "@/lib/orderTimeline";
-import { toast } from "sonner";
-
 import { useAuth } from "@/context/AuthContext";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { hasPermission } from "@/lib/permissions";
+import { toast } from "sonner";
 
 const COLUMNS = [
-  { key: "new", label: "Novo" },
-  { key: "in_preparation", label: "Em preparo" },
-  { key: "ready", label: "Pronto" },
+  { key: "new", label: "Novo", accent: "bg-[#5c9beb]", dot: "bg-[#367fda] dark:bg-[#5c9beb]" },
+  { key: "in_preparation", label: "Em preparo", accent: "bg-[#b97822] dark:bg-[#e6a04a]", dot: "bg-[#b97822] dark:bg-[#e6a04a]" },
+  { key: "ready", label: "Pronto", accent: "bg-[#2e8f63] dark:bg-[#4fbe8b]", dot: "bg-[#2e8f63] dark:bg-[#4fbe8b]" },
 ];
 
-// Mesmo limiar do destaque de atenção do KDS (frontend/src/pages/KitchenPage.jsx):
-// 20min+ em preparo. updated_at só muda em transição real de status (backend/modules/
-// orders/routes.py), nunca por edição de conteúdo — por isso é seguro usá-lo aqui também.
 const ATTENTION_THRESHOLD_MS = 20 * 60 * 1000;
 
 export default function DashboardPage() {
@@ -31,6 +24,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const canSeeFinance = hasPermission(user, "dashboard.metrics");
   const canCreateOrder = hasPermission(user, "orders.create");
+  const canViewOrders = hasPermission(user, "orders.view");
   const canOrderStatus = hasPermission(user, "orders.status");
   const canKdsStatus = hasPermission(user, "kds.status");
   const [orders, setOrders] = useState([]);
@@ -47,8 +41,8 @@ export default function DashboardPage() {
         const statsRes = await api.get("/orders/stats");
         setStats(statsRes.data);
       }
-    } catch (e) {
-      toast.error(formatApiError(e));
+    } catch (error) {
+      toast.error(formatApiError(error));
     } finally {
       setLoading(false);
     }
@@ -56,249 +50,203 @@ export default function DashboardPage() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 30000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- deve rodar só na montagem; load muda a cada render
+    const timer = setInterval(load, 30000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- preserva o polling atual de 30s
   }, []);
 
   const byStatus = useMemo(() => {
-    const g = { new: [], in_preparation: [], ready: [] };
-    for (const o of orders) if (g[o.status]) g[o.status].push(o);
-    return g;
+    const grouped = { new: [], in_preparation: [], ready: [] };
+    for (const order of orders) if (grouped[order.status]) grouped[order.status].push(order);
+    return grouped;
   }, [orders]);
 
-  const activeTotal = orders.length;
-
-  // Quantos pedidos em preparo já passaram do limiar de atenção — recalculado a cada
-  // atualização de `orders` (refresh automático de 30s já existente ou botão Atualizar),
-  // sem nenhum timer/polling novo.
   const attentionCount = useMemo(
-    () => byStatus.in_preparation.filter((o) => Date.now() - new Date(o.updated_at).getTime() >= ATTENTION_THRESHOLD_MS).length,
+    () => byStatus.in_preparation.filter(
+      (order) => Date.now() - new Date(order.updated_at).getTime() >= ATTENTION_THRESHOLD_MS,
+    ).length,
     [byStatus],
   );
 
-  const advance = async (o) => {
-    const next = NEXT_STATUS[o.status];
+  const advance = async (order) => {
+    const next = NEXT_STATUS[order.status];
     if (!next || (!canOrderStatus && (!canKdsStatus || next === "delivered"))) return;
     try {
-      await api.patch(`/orders/${o.id}/status`, { status: next });
-      toast.success(`Pedido #${o.order_number} → ${STATUS_LABEL[next]}`);
+      await api.patch(`/orders/${order.id}/status`, { status: next });
+      toast.success(`Pedido #${order.order_number} → ${STATUS_LABEL[next]}`);
       load();
-    } catch (e) {
-      toast.error(formatApiError(e));
+    } catch (error) {
+      toast.error(formatApiError(error));
     }
   };
 
+  const dateLabel = new Intl.DateTimeFormat("pt-BR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date());
+  const operationalState = byStatus.ready.length > 0
+    ? `${byStatus.ready.length} aguardando entrega`
+    : orders.length > 0
+      ? `${orders.length} pedido${orders.length === 1 ? "" : "s"} ativo${orders.length === 1 ? "" : "s"}`
+      : "nenhuma ação pendente";
+
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto">
-      <PageHeader
-        title="Dashboard"
-        subtitle="Pedidos ativos e o que precisa de atenção agora"
-        action={
-          <>
-            <Button variant="outline" onClick={load} disabled={loading} data-testid="refresh-orders-button" size="sm">
-              <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} /> Atualizar
+    <div className="mx-auto flex min-h-[calc(100vh-3.5rem)] max-w-[1340px] flex-col px-4 py-5 sm:px-7 md:min-h-screen lg:px-[54px] lg:py-8">
+      <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-start sm:justify-between lg:pb-7">
+        <div>
+          <h1 className="text-[26px] font-bold leading-tight text-foreground">Operação</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground first-letter:uppercase">{dateLabel}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={load} disabled={loading} data-testid="refresh-orders-button" size="sm" className="h-[34px] rounded-[5px] px-4 text-[11px] shadow-none">
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Atualizar
+          </Button>
+          {canCreateOrder && (
+            <Button asChild data-testid="create-order-button" size="sm" className="h-[34px] rounded-[5px] px-4 text-[11px] shadow-none">
+              <Link to="/pedidos/novo"><Plus className="mr-1.5 h-3.5 w-3.5" /> Novo pedido</Link>
             </Button>
-            {canCreateOrder && (
-              <Link to="/pedidos/novo">
-                <Button data-testid="create-order-button" size="sm">
-                  <Plus className="w-4 h-4 mr-1.5" /> Novo Pedido
-                </Button>
-              </Link>
-            )}
-          </>
-        }
-      />
+          )}
+        </div>
+      </header>
+
+      <section className="grid gap-5 border-b py-4 sm:grid-cols-2 lg:grid-cols-[180px_220px_220px_1fr] lg:items-center" data-testid="ops-now">
+        {COLUMNS.map((column) => (
+          <div key={column.key} className="flex items-center gap-4" data-testid={`ops-now-${column.key}`}>
+            <span className="text-[32px] font-bold leading-none tabular-nums text-foreground">{byStatus[column.key].length}</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              {column.label.toLowerCase()}
+              <span className={`mt-1.5 block h-1.5 w-1.5 rounded-full ${column.dot}`} aria-hidden="true" />
+            </span>
+          </div>
+        ))}
+        <div className="lg:justify-self-end">
+          {attentionCount > 0 ? (
+            <div className="flex items-center gap-2 text-xs font-medium text-amber-700 dark:text-amber-400" data-testid="ops-now-attention">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {attentionCount} em preparo há mais de 20 min
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">{operationalState}</p>
+          )}
+        </div>
+      </section>
 
       {user?.role === "kitchen" && (
-        <Link
-          to="/cozinha"
-          className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 hover:bg-orange-100 dark:border-orange-900 dark:bg-orange-950 dark:hover:bg-orange-900 transition-colors"
-          data-testid="kitchen-shortcut-banner"
-        >
-          <span className="flex items-center gap-2.5 text-sm font-medium text-orange-900 dark:text-orange-200">
-            <ChefHat className="w-4 h-4" /> Sua tela de trabalho é a Cozinha — pedidos por ticket, botões grandes.
-          </span>
-          <ArrowRight className="w-4 h-4 text-orange-700 dark:text-orange-400 shrink-0" />
+        <Link to="/cozinha" className="mt-4 text-xs font-semibold text-primary underline-offset-4 hover:underline" data-testid="kitchen-shortcut-banner">
+          Abrir tela da Cozinha →
         </Link>
       )}
 
-      {/* Operação agora — resumo por status para quem não abre a Cozinha (ex.: gerente),
-          com os mesmos pedidos ativos já carregados e o mesmo limiar de atenção do KDS. */}
-      <section className="mb-6" data-testid="ops-now">
-        <SectionTitle>Operação agora</SectionTitle>
-        <div className="flex flex-col sm:flex-row gap-3">
-          {COLUMNS.map((col) => {
-            const Icon = STATUS_ICON[col.key];
-            return (
-              <div
-                key={col.key}
-                className="flex-1 bg-card border rounded-lg px-4 py-3 flex items-center justify-between gap-3"
-                data-testid={`ops-now-${col.key}`}
-              >
-                <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  {Icon && <Icon className="w-4 h-4 text-muted-foreground" />} {col.label}
-                </span>
-                <span className="font-display text-xl font-bold text-foreground">{byStatus[col.key].length}</span>
-              </div>
-            );
-          })}
+      <section className="flex-1 pt-7">
+        <div className="mb-4 flex items-baseline justify-between gap-4">
+          <h2 className="text-[15px] font-semibold text-foreground">Fila de pedidos</h2>
+          <span className="text-[11px] text-muted-foreground">ordem operacional</span>
         </div>
-        {attentionCount > 0 && (
-          <div
-            className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950 px-4 py-2.5 text-sm text-amber-900 dark:text-amber-200"
-            data-testid="ops-now-attention"
-          >
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            <span>
-              <span className="font-semibold">⚠ Atenção · </span>
-              {attentionCount} pedido{attentionCount !== 1 ? "s" : ""} em preparo há mais de 20 min
-            </span>
-          </div>
-        )}
-      </section>
 
-      {/* Indicadores principais — sempre corretos para qualquer papel, calculados a partir dos pedidos ativos já
-          carregados (não repetem a contagem por status, que já aparece nas colunas logo abaixo) */}
-      <div className="grid grid-cols-2 gap-3 mb-6 max-w-md">
-        <Indicator label="Pedidos ativos" value={activeTotal} testid="metric-active" />
-        <Indicator label="Prontos p/ entrega" value={byStatus.ready.length} highlight={byStatus.ready.length > 0} testid="metric-ready" />
-      </div>
-
-      {/* Situação atual dos pedidos */}
-      <section className="mb-6">
-        <SectionTitle>Situação atual dos pedidos</SectionTitle>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {COLUMNS.map((col) => (
-            <div key={col.key} className="bg-card border rounded-lg overflow-hidden flex flex-col" data-testid={`column-${col.key}`}>
-              <div className="px-4 py-3 border-b flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <StatusBadge status={col.key} />
-                  <span className="text-xs text-muted-foreground">
-                    {byStatus[col.key].length} pedido{byStatus[col.key].length !== 1 ? "s" : ""}
-                  </span>
-                </div>
+        <div className="grid lg:min-h-[390px] lg:grid-cols-3">
+          {COLUMNS.map((column, index) => (
+            <section
+              key={column.key}
+              className={`min-w-0 pb-7 lg:px-4 ${index === 0 ? "lg:pl-0" : "lg:border-l"} ${index === COLUMNS.length - 1 ? "lg:pr-0" : ""}`}
+              data-testid={`column-${column.key}`}
+            >
+              <div className="flex items-center gap-2 border-b pb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <span className={`h-[7px] w-[7px] rounded-full ${column.dot}`} aria-hidden="true" />
+                {column.label}
+                <span className="ml-auto tabular-nums">{byStatus[column.key].length}</span>
               </div>
-              <div className="p-3 space-y-2 min-h-[160px] max-h-[calc(100vh-420px)] overflow-y-auto">
-                {byStatus[col.key].length === 0 && (
-                  <div className="text-center text-sm text-muted-foreground py-10">Sem pedidos</div>
-                )}
-                {byStatus[col.key].map((o) => (
-                  <div key={o.id} className="border rounded-md p-3 hover:border-slate-300 dark:hover:border-slate-600 bg-card" data-testid={`order-card-${o.order_number}`}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <Link to={`/pedidos/${o.id}`} className="font-display font-semibold text-foreground hover:text-primary">
-                        #{o.order_number}
-                      </Link>
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> {formatTime(o.created_at)}
-                      </span>
-                    </div>
-                    <div className="text-sm text-foreground truncate">
-                      {o.customer_name || <span className="text-muted-foreground italic">Sem cliente</span>}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {o.items.length} ite{o.items.length !== 1 ? "ns" : "m"} · {brl(o.total)}
-                    </div>
-                    {NEXT_STATUS[o.status] && (canOrderStatus || (canKdsStatus && NEXT_STATUS[o.status] !== "delivered")) && (
-                      <button
-                        onClick={() => advance(o)}
-                        data-testid={`advance-${o.order_number}`}
-                        className="mt-2 w-full text-xs font-medium text-primary hover:bg-accent rounded px-2 py-2.5 flex items-center justify-center gap-1"
-                      >
-                        Avançar para {STATUS_LABEL[NEXT_STATUS[o.status]]} <ChevronRight className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
+              <div>
+                {byStatus[column.key].map((order) => (
+                  <OrderRow
+                    key={order.id}
+                    order={order}
+                    accent={column.accent}
+                    canOpen={canViewOrders}
+                    canAdvance={!!NEXT_STATUS[order.status] && (canOrderStatus || (canKdsStatus && NEXT_STATUS[order.status] !== "delivered"))}
+                    onAdvance={() => advance(order)}
+                  />
                 ))}
+                {!loading && byStatus[column.key].length === 0 && (
+                  <p className="py-8 text-center text-xs text-muted-foreground">Sem pedidos</p>
+                )}
               </div>
-            </div>
+            </section>
           ))}
         </div>
         {!loading && orders.length === 0 && (
-          <div className="mt-4">
-            <EmptyState title="Nenhum pedido ativo no momento" description="Novos pedidos aparecem aqui assim que forem criados." />
-          </div>
+          <p className="-mt-5 text-center text-xs text-muted-foreground">Os pedidos aparecem aqui conforme entram.</p>
         )}
       </section>
 
-      {/* Informações de vendas e desempenho operacional do dia — só para quem enxerga
-          faturamento. Indicadores de hoje vêm de GET /orders/stats (created_at/delivered_at,
-          nunca reescritos) — operacionais de UM restaurante, não BI/comparação (isso fica
-          no DACOT Hub). Não duplica o alerta de "20+ min em preparo" já existente acima. */}
       {canSeeFinance && (
-        <section>
-          <SectionTitle>Vendas & desempenho hoje</SectionTitle>
-          <div className="bg-card border rounded-lg p-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <button
-              type="button"
-              onClick={() => setMetricDialog("revenue")}
-              className="text-left rounded-md -m-1.5 p-1.5 hover:bg-muted/60 transition-colors"
-              data-testid="metric-revenue"
-            >
-              <div className="flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                Faturamento hoje <ChevronRight className="w-3 h-3 opacity-60" />
-              </div>
-              <div className="mt-1 font-display text-2xl sm:text-3xl font-bold text-foreground">
-                {stats ? brl(stats.today_revenue) : "—"}
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setMetricDialog("createdToday")}
-              className="text-left rounded-md -m-1.5 p-1.5 hover:bg-muted/60 transition-colors"
-              data-testid="metric-orders-today"
-            >
-              <div className="flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                Pedidos hoje <ChevronRight className="w-3 h-3 opacity-60" />
-              </div>
-              <div className="mt-1 font-display text-2xl font-semibold text-foreground">
-                {stats ? stats.orders_created_today : "—"}
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setMetricDialog("deliveredToday")}
-              className="text-left rounded-md -m-1.5 p-1.5 hover:bg-muted/60 transition-colors"
-              data-testid="metric-delivered-today"
-            >
-              <div className="flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                Entregues hoje <ChevronRight className="w-3 h-3 opacity-60" />
-              </div>
-              <div className="mt-1 font-display text-2xl font-semibold text-foreground">
-                {stats ? stats.orders_delivered_today : "—"}
-              </div>
-            </button>
-            <button
-              type="button"
+        <section className="border-t pb-3 pt-5">
+          <h2 className="mb-4 text-xs font-semibold text-muted-foreground">Hoje</h2>
+          <div className="grid grid-cols-2 gap-x-5 gap-y-6 sm:grid-cols-4 lg:grid-cols-[1.2fr_0.8fr_0.9fr_1fr]">
+            <MetricButton label="Faturamento" value={stats ? brl(stats.today_revenue) : "—"} testid="metric-revenue" onClick={() => setMetricDialog("revenue")} />
+            <MetricButton label="Pedidos" value={stats ? stats.orders_created_today : "—"} testid="metric-orders-today" onClick={() => setMetricDialog("createdToday")} />
+            <MetricButton label="Entregues" value={stats ? stats.orders_delivered_today : "—"} testid="metric-delivered-today" onClick={() => setMetricDialog("deliveredToday")} />
+            <MetricButton
+              label="Tempo total médio"
+              value={stats && stats.avg_order_total_minutes_today != null ? formatDurationMinutes(stats.avg_order_total_minutes_today * 60000) : "—"}
+              testid="metric-avg-total-time-today"
               onClick={() => setMetricDialog("avgTime")}
-              className="text-left rounded-md -m-1.5 p-1.5 hover:bg-muted/60 transition-colors"
-              data-testid="metric-avg-total-time-today"
-            >
-              <div className="flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                Tempo total médio hoje <ChevronRight className="w-3 h-3 opacity-60" />
-              </div>
-              <div className="mt-1 font-display text-2xl font-semibold text-foreground">
-                {stats && stats.avg_order_total_minutes_today != null ? formatDurationMinutes(stats.avg_order_total_minutes_today * 60000) : "—"}
-              </div>
-            </button>
+            />
           </div>
         </section>
       )}
 
-      <DashboardMetricDialog open={!!metricDialog} onOpenChange={(v) => !v && setMetricDialog(null)} kind={metricDialog} />
+      <DashboardMetricDialog open={!!metricDialog} onOpenChange={(open) => !open && setMetricDialog(null)} kind={metricDialog} />
     </div>
   );
 }
 
-function SectionTitle({ children }) {
-  return <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">{children}</h2>;
+function OrderRow({ order, accent, canOpen, canAdvance, onAdvance }) {
+  const itemSummary = order.items
+    .map((item) => `${item.quantity} × ${item.product_name || item.name || "Item"}`)
+    .join(" · ");
+  const actionLabel = order.status === "new"
+    ? "Iniciar"
+    : order.status === "in_preparation"
+      ? "Marcar pronto"
+      : "Entregar";
+  const statusTime = order.status === "new" ? order.created_at : order.updated_at;
+
+  return (
+    <article className="relative border-b py-4 pl-3 pr-1" data-testid={`order-card-${order.order_number}`}>
+      <span className={`absolute bottom-4 left-0 top-4 w-0.5 ${accent}`} aria-hidden="true" />
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="flex min-w-0 items-baseline gap-4">
+          {canOpen ? (
+            <Link to={`/pedidos/${order.id}`} className="shrink-0 text-[13px] font-semibold text-foreground underline-offset-4 hover:text-primary hover:underline">
+              #{order.order_number}
+            </Link>
+          ) : (
+            <span className="shrink-0 text-[13px] font-semibold text-foreground">#{order.order_number}</span>
+          )}
+          <span className="truncate text-[11px] text-muted-foreground">{formatTime(statusTime)}</span>
+        </div>
+        {canAdvance && (
+          <button type="button" onClick={onAdvance} className="shrink-0 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid={`advance-${order.order_number}`}>
+            {actionLabel}
+          </button>
+        )}
+      </div>
+      <div className="mt-1 text-xs font-medium text-foreground">{order.customer_name || "Sem cliente"}</div>
+      <div className="mt-1 flex min-w-0 items-center justify-between gap-3 text-[11px] text-muted-foreground">
+        <span className="truncate">{itemSummary || `${order.items.length} ite${order.items.length === 1 ? "m" : "ns"}`}</span>
+        {order.notes && <span className="max-w-[38%] truncate font-medium text-foreground/70">{order.notes}</span>}
+      </div>
+    </article>
+  );
 }
 
-function Indicator({ label, value, highlight = false, testid }) {
+function MetricButton({ label, value, testid, onClick }) {
   return (
-    <div className={`bg-card border rounded-lg p-4 ${highlight ? "border-primary/40 bg-accent/30" : ""}`} data-testid={testid}>
-      <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">{label}</div>
-      <div className={`mt-1 font-display text-2xl font-bold ${highlight ? "text-primary" : "text-foreground"}`}>{value}</div>
-    </div>
+    <button type="button" onClick={onClick} className="group min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid={testid}>
+      <div className="text-[23px] font-bold leading-tight text-foreground">{value}</div>
+      <div className="mt-1 text-[11px] text-muted-foreground underline-offset-4 group-hover:text-foreground group-hover:underline">{label} · ver detalhes</div>
+    </button>
   );
 }
