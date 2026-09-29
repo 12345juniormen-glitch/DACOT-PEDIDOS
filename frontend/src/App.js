@@ -16,6 +16,7 @@ import UsersPage from "@/pages/UsersPage";
 import ChangePasswordPage from "@/pages/ChangePasswordPage";
 import MyProfilePage from "@/pages/MyProfilePage";
 import KitchenPage from "@/pages/KitchenPage";
+import WaiterPage from "@/pages/WaiterPage";
 import WhatsAppPage from "@/pages/WhatsAppPage";
 import NotFoundPage from "@/pages/NotFoundPage";
 import "@/App.css";
@@ -32,7 +33,10 @@ function Shell({ children, permission }) {
 }
 function PermissionGuard({ permission, children }) {
   const { user } = useAuth();
-  if (permission && user && !hasPermission(user, permission)) return <Navigate to="/meu-perfil" replace />;
+  const allowed = !permission || (Array.isArray(permission)
+    ? permission.every((item) => hasPermission(user, item))
+    : hasPermission(user, permission));
+  if (user && !allowed) return <Navigate to="/meu-perfil" replace />;
   return children;
 }
 
@@ -61,6 +65,8 @@ function App() {
           <Route path="/clientes" element={<Shell permission="customers.view"><CustomersPage /></Shell>} />
           <Route path="/usuarios" element={<Shell permission="users.view"><UsersPage /></Shell>} />
           <Route path="/cozinha" element={<Shell permission="kds.view"><KitchenPage /></Shell>} />
+          <Route path="/garcom" element={<Shell permission="service.view"><WaiterPage /></Shell>} />
+          <Route path="/garcom/novo" element={<Shell permission={["service.view", "orders.create"]}><OrderCreatePage operational /></Shell>} />
           <Route path="/whatsapp" element={<Shell permission="whatsapp.view"><WhatsAppPage /></Shell>} />
           <Route path="/meu-perfil" element={<Shell><MyProfilePage /></Shell>} />
           <Route path="*" element={<NotFoundPage />} />

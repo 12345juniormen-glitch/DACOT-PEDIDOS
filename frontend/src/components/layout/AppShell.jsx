@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { LayoutDashboard, ClipboardList, History, Package, Users, LogOut, UtensilsCrossed, ShieldCheck, UserCircle, ChefHat, Menu, Search, MessageCircle } from "lucide-react";
+import { LayoutDashboard, ClipboardList, History, Package, Users, LogOut, UtensilsCrossed, ShieldCheck, UserCircle, ChefHat, HandPlatter, Menu, Search, MessageCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -12,6 +12,7 @@ const ROLE_LABEL = { admin: "Administrador", manager: "Gerente", waiter: "Atendi
 const NAV_ALL = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard", end: true, permission: "dashboard.view" },
   { to: "/pedidos/novo", label: "Novo Pedido", icon: ClipboardList, testid: "nav-new-order", permission: "orders.create" },
+  { to: "/garcom", label: "Garçom", icon: HandPlatter, testid: "nav-waiter", permission: "service.view" },
   { to: "/cozinha", label: "Cozinha", icon: ChefHat, testid: "nav-kitchen", permission: "kds.view" },
   { to: "/historico", label: "Histórico", icon: History, testid: "nav-history", permission: "history.view" },
   { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle, testid: "nav-whatsapp", permission: "whatsapp.view" },

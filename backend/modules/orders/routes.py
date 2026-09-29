@@ -273,7 +273,7 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 
 @router.get("", response_model=list[OrderOut])
 async def list_orders(
-    tenant: Tenant = Depends(require_any_permission("orders.view", "dashboard.view", "kds.view")),
+    tenant: Tenant = Depends(require_any_permission("orders.view", "dashboard.view", "kds.view", "service.view")),
     status_filter: Optional[str] = Query(None, alias="status"),
     active_only: bool = Query(False, description="Se true, oculta 'delivered' e 'cancelled'"),
     customer_id: Optional[str] = Query(None, description="Filtra pelo histórico de um cliente"),

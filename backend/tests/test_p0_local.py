@@ -156,6 +156,8 @@ def test_custom_permissions_and_optional_password_change():
     assert set(catalog.json()["presets"]) == {"admin", "manager", "waiter", "kitchen"}
     assert "dashboard.metrics" in catalog.json()["presets"]["manager"]
     assert "dashboard.metrics" not in catalog.json()["presets"]["waiter"]
+    assert "service.view" in catalog.json()["presets"]["waiter"]
+    assert "service.view" not in catalog.json()["presets"]["kitchen"]
     assert "users.manage" in admin["user"]["permissions"]
 
     # A custom permission list overrides the role preset and is read from the DB
@@ -256,7 +258,7 @@ def test_custom_roles_are_tenant_scoped_and_safe_to_edit_or_delete():
     tenant_a, tenant_b = uuid.uuid4().hex[:24], uuid.uuid4().hex[:24]
     headers_a, headers_b = admin_session(tenant_a), admin_session(tenant_b)
     created_role = requests.post(f"{API}/users/custom-roles", headers=headers_a, timeout=20, json={
-        "name": "Garçom", "permissions": ["orders.view", "orders.create"],
+        "name": "Garçom", "permissions": ["service.view", "orders.create"],
     })
     assert created_role.status_code == 201, created_role.text[:200]
     custom_role = created_role.json()
@@ -282,21 +284,23 @@ def test_custom_roles_are_tenant_scoped_and_safe_to_edit_or_delete():
     assigned_user = assigned.json()
     assert assigned_user["role"] == "waiter"
     assert assigned_user["custom_role_id"] == custom_role["id"]
-    assert set(assigned_user["permissions"]) == {"orders.view", "orders.create"}
+    assert set(assigned_user["permissions"]) == {"service.view", "orders.create"}
     assigned_login = requests.post(f"{API}/auth/login", timeout=20, json={
         "email": assigned_user["email"], "password": "password-1",
     })
     assert assigned_login.status_code == 200, assigned_login.text[:200]
     assert assigned_login.json()["user"]["custom_role_name"] == "Garçom"
+    assigned_headers = {"Authorization": f"Bearer {assigned_login.json()['token']}"}
+    assert requests.get(f"{API}/orders", headers=assigned_headers, timeout=20).status_code == 200
 
     edited_role = requests.put(
         f"{API}/users/custom-roles/{custom_role['id']}", headers=headers_a, timeout=20,
-        json={"name": "Garçom salão", "permissions": ["orders.view"]},
+        json={"name": "Garçom salão", "permissions": ["service.view"]},
     )
     assert edited_role.status_code == 200, edited_role.text[:200]
     listed_user = next(item for item in requests.get(f"{API}/users", headers=headers_a, timeout=20).json()
                        if item["id"] == assigned_user["id"])
-    assert set(listed_user["permissions"]) == {"orders.view", "orders.create"}
+    assert set(listed_user["permissions"]) == {"service.view", "orders.create"}
     assert requests.delete(
         f"{API}/users/custom-roles/{custom_role['id']}", headers=headers_a, timeout=20,
     ).status_code == 409

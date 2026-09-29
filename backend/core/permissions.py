@@ -16,6 +16,9 @@ PERMISSION_GROUPS = [
         {"key": "orders.status", "label": "Alterar status"},
         {"key": "orders.cancel", "label": "Cancelar"},
     ]},
+    {"key": "service", "label": "Garçom", "permissions": [
+        {"key": "service.view", "label": "Acessar tela operacional"},
+    ]},
     {"key": "kds", "label": "Cozinha (KDS)", "permissions": [
         {"key": "kds.view", "label": "Visualizar"},
         {"key": "kds.status", "label": "Alterar status"},
@@ -60,7 +63,7 @@ ROLE_PERMISSION_PRESETS = {
         "whatsapp.view", "whatsapp.operate", "whatsapp.configure",
     }),
     "waiter": frozenset({
-        "dashboard.view",
+        "dashboard.view", "service.view",
         "orders.view", "orders.create", "orders.edit", "orders.status", "orders.cancel",
         "customers.view", "customers.manage",
         "products.view",

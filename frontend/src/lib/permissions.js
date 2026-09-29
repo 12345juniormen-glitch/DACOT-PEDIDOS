@@ -11,7 +11,7 @@ const LEGACY_ROLE_PRESETS = {
     "whatsapp.view", "whatsapp.operate", "whatsapp.configure",
   ],
   waiter: [
-    "dashboard.view", "orders.view", "orders.create", "orders.edit", "orders.status", "orders.cancel",
+    "dashboard.view", "service.view", "orders.view", "orders.create", "orders.edit", "orders.status", "orders.cancel",
     "customers.view", "customers.manage", "products.view", "history.view", "history.export",
     "whatsapp.view", "whatsapp.operate",
   ],

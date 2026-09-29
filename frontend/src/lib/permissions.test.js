@@ -3,6 +3,7 @@ import { effectivePermissions, hasAnyPermission, hasPermission } from "./permiss
 describe("permissões efetivas", () => {
   test("usa o preset da role para usuários antigos sem permissions", () => {
     expect(hasPermission({ role: "waiter" }, "orders.create")).toBe(true);
+    expect(hasPermission({ role: "waiter" }, "service.view")).toBe(true);
     expect(hasPermission({ role: "waiter" }, "users.manage")).toBe(false);
   });
 
