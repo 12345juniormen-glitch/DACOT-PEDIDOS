@@ -18,6 +18,7 @@ import { StatusBadge, STATUS_ICON } from "@/components/StatusBadge";
 import { api, formatApiError } from "@/lib/api";
 import { brl, formatDateTime, STATUS_LABEL, STATUS_ORDER } from "@/lib/format";
 import { buildAuditTimelineEvents, computeTotalDurationMs, computeUntilCurrentDurationMs, formatDurationMinutes } from "@/lib/orderTimeline";
+import { formatOrderPrepEstimate } from "@/lib/prepTime";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/context/AuthContext";
 import { hasPermission } from "@/lib/permissions";
@@ -128,6 +129,7 @@ export default function OrderDetailPage() {
   const untilCurrentDurationMs = computeUntilCurrentDurationMs(order);
   const untilCurrentDuration = untilCurrentDurationMs != null ? formatDurationMinutes(untilCurrentDurationMs) : null;
   const currentStageLabel = STATUS_LABEL[order.status];
+  const prepEstimate = formatOrderPrepEstimate(order.items);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
@@ -144,6 +146,7 @@ export default function OrderDetailPage() {
           <div className="text-sm text-muted-foreground mt-1">
             {formatDateTime(order.created_at)} · {order.customer_name || <span className="italic">Sem cliente</span>}
           </div>
+          {prepEstimate && <div className="mt-1 text-sm text-muted-foreground">Previsão de preparo: <span className="font-medium text-foreground">{prepEstimate}</span></div>}
           <div className="mt-3"><StatusBadge status={order.status} /></div>
         </div>
 

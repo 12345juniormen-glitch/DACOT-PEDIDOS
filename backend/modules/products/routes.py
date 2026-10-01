@@ -16,6 +16,7 @@ class ProductInput(BaseModel):
     description: str = Field(default="", max_length=500)
     price: float = Field(ge=0)
     category: str = Field(default="Geral", max_length=60)
+    prep_time_seconds: int = Field(default=0, ge=0, le=5999)
     active: bool = True
 
 
@@ -25,6 +26,7 @@ class ProductOut(BaseModel):
     description: str
     price: float
     category: str
+    prep_time_seconds: int
     active: bool
     created_at: str
     updated_at: str
@@ -37,6 +39,7 @@ def _to_out(doc: dict) -> ProductOut:
         description=doc.get("description", ""),
         price=cents_to_reais(doc["price_cents"]),
         category=doc.get("category", "Geral"),
+        prep_time_seconds=int(doc.get("prep_time_seconds", 0)),
         active=doc.get("active", True),
         created_at=doc["created_at"],
         updated_at=doc["updated_at"],
@@ -76,6 +79,7 @@ async def create_product(payload: ProductInput, tenant: Tenant = Depends(require
         "description": payload.description.strip(),
         "price_cents": reais_to_cents(payload.price),
         "category": payload.category.strip() or "Geral",
+        "prep_time_seconds": payload.prep_time_seconds,
         "active": payload.active,
         "created_at": now,
         "updated_at": now,
@@ -111,6 +115,7 @@ async def update_product(product_id: str, payload: ProductInput, tenant: Tenant 
         "description": payload.description.strip(),
         "price_cents": reais_to_cents(payload.price),
         "category": payload.category.strip() or "Geral",
+        "prep_time_seconds": payload.prep_time_seconds,
         "active": payload.active,
         "updated_at": now,
     }
@@ -123,6 +128,21 @@ async def update_product(product_id: str, payload: ProductInput, tenant: Tenant 
     if not result:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
     return _to_out(result)
+
+
+@router.delete("/{product_id}/permanent", status_code=204)
+async def permanently_delete_product(
+    product_id: str,
+    tenant: Tenant = Depends(require_permissions("products.manage")),
+):
+    """Remove apenas o cadastro atual; pedidos preservam seus próprios snapshots."""
+    db = get_db()
+    result = await db.products.delete_one(
+        {"id": product_id, "restaurant_id": tenant.restaurant_id}
+    )
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+    return None
 
 
 @router.delete("/{product_id}", status_code=204)

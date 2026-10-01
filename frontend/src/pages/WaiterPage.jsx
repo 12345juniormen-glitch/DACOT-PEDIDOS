@@ -13,6 +13,7 @@ import { api, formatApiError } from "@/lib/api";
 import { STATUS_LABEL } from "@/lib/format";
 import { hasPermission } from "@/lib/permissions";
 import { groupWaiterOrders, waiterElapsedMinutes } from "@/lib/waiterOrders";
+import { formatOrderPrepEstimate } from "@/lib/prepTime";
 import { toast } from "sonner";
 
 export default function WaiterPage() {
@@ -119,6 +120,7 @@ function OrderSection({ title, orders, empty, ready = false, now, canView, canCh
       {orders.length === 0 && <p className="px-4 py-6 text-sm text-center text-muted-foreground">{empty}</p>}
       {orders.map((order) => {
         const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
+        const prepEstimate = formatOrderPrepEstimate(order.items);
         return <article key={order.id} className={ready ? "bg-emerald-50 dark:bg-emerald-950/50" : "bg-card"}>
           <button type="button" disabled={!canView} onClick={() => canView && onOpen(order)} className="w-full min-h-24 px-4 py-3 flex items-center gap-3 text-left disabled:cursor-default">
             <div className="min-w-0 flex-1">
@@ -127,9 +129,10 @@ function OrderSection({ title, orders, empty, ready = false, now, canView, canCh
                 <span className={`text-sm font-semibold ${ready ? "text-emerald-700 dark:text-emerald-300" : "text-foreground"}`}>{STATUS_LABEL[order.status]}</span>
               </div>
               <div className="font-medium truncate mt-1">{order.customer_name || "Sem cliente"}</div>
-              <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground mt-1">
                 <span>{itemCount} {itemCount === 1 ? "item" : "itens"}</span>
                 <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {waiterElapsedMinutes(order, now)} min</span>
+                {prepEstimate && <span>Previsão {prepEstimate}</span>}
               </div>
             </div>
             {canView && <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />}

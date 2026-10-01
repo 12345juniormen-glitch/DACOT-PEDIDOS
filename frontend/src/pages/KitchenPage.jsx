@@ -7,6 +7,7 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { hasPermission } from "@/lib/permissions";
+import { formatOrderPrepEstimate } from "@/lib/prepTime";
 
 // KDS — visão exclusiva para cozinha.
 // Mostra pedidos em `new`, `in_preparation` e `ready`.
@@ -283,6 +284,7 @@ function KitchenCard({ order, now, accent = "blue", children }) {
       : "border-slate-200 dark:border-slate-700";
   const stageTimestamp = order[STAGE_TIMESTAMP_FIELD[order.status]] || order.created_at;
   const elapsedMs = now - new Date(stageTimestamp).getTime();
+  const prepEstimate = formatOrderPrepEstimate(order.items);
   return (
     <article
       data-testid={`kitchen-order-${order.order_number}`}
@@ -296,6 +298,11 @@ function KitchenCard({ order, now, accent = "blue", children }) {
         </div>
       </header>
       <div className="p-4 space-y-2">
+        {prepEstimate && (
+          <div className="flex items-center gap-1.5 text-sm text-muted-foreground" data-testid={`prep-estimate-${order.order_number}`}>
+            <Clock className="h-4 w-4" /> Previsão de preparo: <span className="font-semibold text-foreground">{prepEstimate}</span>
+          </div>
+        )}
         <ul className="space-y-2" data-testid={`items-${order.order_number}`}>
           {order.items.map((i, idx) => (
             <li key={idx} className="flex items-start gap-3">

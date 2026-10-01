@@ -176,6 +176,7 @@ def main():
     parser.add_argument("--handoff-only", action="store_true", help="Run only concurrent handoff regression tests")
     parser.add_argument("--permissions-only", action="store_true", help="Run only auth/user permission regression tests")
     parser.add_argument("--whatsapp-only", action="store_true", help="Run only WhatsApp provider integration tests")
+    parser.add_argument("--products-only", action="store_true", help="Run only product integration tests")
     parser.add_argument("--serial", action="store_true", help="Disable pytest-xdist for diagnosis of shared-fixture races")
     args = parser.parse_args()
     mongod = args.mongod.resolve(strict=True)
@@ -252,7 +253,13 @@ def main():
                                 "tests/test_p0_local.py::test_custom_permissions_and_optional_password_change",
                                 "tests/test_p0_local.py::test_custom_roles_are_tenant_scoped_and_safe_to_edit_or_delete",
                             ] if args.permissions_only
-                            else ["tests/test_whatsapp.py"] if args.whatsapp_only else TESTS)
+                            else ["tests/test_whatsapp.py"] if args.whatsapp_only
+                            else [
+                                "tests/backend_test.py::TestProductsSearch",
+                                "tests/backend_test.py::TestProductPermanentDelete",
+                                "tests/backend_test.py::TestProductPreparationEstimate",
+                            ] if args.products_only
+                            else TESTS)
                 workers = ["-n", "0"] if args.serial else []
                 result = subprocess.run([sys.executable, "-m", "pytest", *selected, *workers, "-q", "-ra"], cwd=BACKEND, env=env)
                 return result.returncode

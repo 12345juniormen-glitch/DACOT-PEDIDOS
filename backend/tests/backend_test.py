@@ -176,6 +176,7 @@ class TestCrossTenantIsolation:
             ("put", f"orders/{oid}", {"items": [{"product_id": pid, "quantity": 3}]}),
             ("put", f"products/{pid}", {"name": "HACK", "price": 1, "category": "C", "active": True}),
             ("delete", f"products/{pid}", None),
+            ("delete", f"products/{pid}/permanent", None),
             ("put", f"customers/{cid}", {"name": "HACK", "phone": "11987654321", "notes": ""}),
         ]
         for method, path, body in checks:
@@ -676,6 +677,133 @@ class TestProductsSearch:
         r = requests.get(f"{API}/products", params={"search": "TEST_Segredo B"}, headers=admin_h, timeout=20)
         assert r.status_code == 200, r.text[:200]
         assert all(p["id"] != beta_data["product"]["id"] for p in r.json()), "produto de outro tenant nao pode aparecer na busca"
+
+
+class TestProductPermanentDelete:
+    @pytest.fixture
+    def tenant_id(self):
+        return uuid.uuid4().hex[:24]
+
+    @pytest.fixture
+    def admin_h(self, tenant_id):
+        r = exchange(sign_handoff(tenant_id, "admin"))
+        assert r.status_code == 200, r.text[:200]
+        return {"Authorization": f"Bearer {r.json()['token']}"}
+
+    def test_requires_manage_permission(self, admin_h, tenant_id):
+        product = requests.post(
+            f"{API}/products",
+            json={"name": "TEST_Protegido", "price": 19.9, "category": "TEST_C", "active": True},
+            headers=admin_h,
+            timeout=20,
+        ).json()
+        waiter = exchange(sign_handoff(tenant_id, "waiter"))
+        assert waiter.status_code == 200, waiter.text[:200]
+        waiter_h = {"Authorization": f"Bearer {waiter.json()['token']}"}
+
+        denied = requests.delete(f"{API}/products/{product['id']}/permanent", headers=waiter_h, timeout=20)
+        assert denied.status_code == 403, denied.text[:200]
+        assert requests.get(f"{API}/products/{product['id']}", headers=admin_h, timeout=20).status_code == 200
+
+    def test_is_tenant_scoped_and_preserves_order_snapshot(self, admin_h, H_B):
+        product = requests.post(
+            f"{API}/products",
+            json={"name": "TEST_Snapshot Permanente", "price": 27.5, "category": "TEST_C", "active": True},
+            headers=admin_h,
+            timeout=20,
+        )
+        assert product.status_code == 201, product.text[:200]
+        product = product.json()
+        order = requests.post(
+            f"{API}/orders",
+            json={"items": [{"product_id": product["id"], "quantity": 2}]},
+            headers=admin_h,
+            timeout=20,
+        )
+        assert order.status_code == 201, order.text[:200]
+        order = order.json()
+
+        foreign = requests.delete(f"{API}/products/{product['id']}/permanent", headers=H_B, timeout=20)
+        assert foreign.status_code == 404, foreign.text[:200]
+
+        deleted = requests.delete(f"{API}/products/{product['id']}/permanent", headers=admin_h, timeout=20)
+        assert deleted.status_code == 204, deleted.text[:200]
+        assert requests.get(f"{API}/products/{product['id']}", headers=admin_h, timeout=20).status_code == 404
+
+        historical = requests.get(f"{API}/orders/{order['id']}", headers=admin_h, timeout=20)
+        assert historical.status_code == 200, historical.text[:200]
+        item = historical.json()["items"][0]
+        assert item["product_id"] == product["id"]
+        assert item["product_name"] == "TEST_Snapshot Permanente"
+        assert item["unit_price"] == 27.5
+
+        repeated = requests.delete(f"{API}/products/{product['id']}/permanent", headers=admin_h, timeout=20)
+        assert repeated.status_code == 404
+
+
+class TestProductPreparationEstimate:
+    @pytest.fixture
+    def admin_h(self):
+        tenant_id = uuid.uuid4().hex[:24]
+        r = exchange(sign_handoff(tenant_id, "admin"))
+        assert r.status_code == 200, r.text[:200]
+        return {"Authorization": f"Bearer {r.json()['token']}"}
+
+    def test_product_time_is_snapshotted_on_order(self, admin_h):
+        product = requests.post(
+            f"{API}/products",
+            json={
+                "name": "TEST_Preparo 0830",
+                "price": 18,
+                "category": "TEST_C",
+                "prep_time_seconds": 510,
+                "active": True,
+            },
+            headers=admin_h,
+            timeout=20,
+        )
+        assert product.status_code == 201, product.text[:200]
+        product = product.json()
+        assert product["prep_time_seconds"] == 510
+
+        order = requests.post(
+            f"{API}/orders",
+            json={"items": [{"product_id": product["id"], "quantity": 2}]},
+            headers=admin_h,
+            timeout=20,
+        )
+        assert order.status_code == 201, order.text[:200]
+        order = order.json()
+        assert order["items"][0]["prep_time_seconds"] == 510
+
+        updated = requests.put(
+            f"{API}/products/{product['id']}",
+            json={
+                "name": product["name"],
+                "price": product["price"],
+                "category": product["category"],
+                "prep_time_seconds": 120,
+                "active": True,
+            },
+            headers=admin_h,
+            timeout=20,
+        )
+        assert updated.status_code == 200, updated.text[:200]
+        assert updated.json()["prep_time_seconds"] == 120
+
+        historical = requests.get(f"{API}/orders/{order['id']}", headers=admin_h, timeout=20)
+        assert historical.status_code == 200, historical.text[:200]
+        assert historical.json()["items"][0]["prep_time_seconds"] == 510
+
+    def test_missing_time_defaults_to_instant(self, admin_h):
+        product = requests.post(
+            f"{API}/products",
+            json={"name": "TEST_Instantaneo", "price": 5, "category": "TEST_C", "active": True},
+            headers=admin_h,
+            timeout=20,
+        )
+        assert product.status_code == 201, product.text[:200]
+        assert product.json()["prep_time_seconds"] == 0
 
 
 # ---------------- Order timeline: delivered_at exposure ----------------

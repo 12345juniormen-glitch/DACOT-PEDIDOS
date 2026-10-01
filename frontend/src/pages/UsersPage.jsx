@@ -23,6 +23,7 @@ import { hasPermission } from "@/lib/permissions";
 
 const ROLE_LABEL = { admin: "Administrador", manager: "Gerente", waiter: "Atendimento", kitchen: "Cozinha" };
 const ROLES = ["admin", "manager", "waiter", "kitchen"];
+const HIDDEN_PERMISSIONS = new Set(["dashboard.metrics"]);
 const emptyCreate = { name: "", email: "", temp_password: "", role: "waiter", custom_role_id: null, permissions: [], require_password_change: false };
 const emptyCustomRole = { name: "", permissions: [] };
 
@@ -55,8 +56,16 @@ export default function UsersPage() {
         api.get("/users"), api.get("/users/permissions"), api.get("/users/custom-roles"),
       ]);
       setUsers(usersResponse.data);
-      setPermissionGroups(permissionsResponse.data.groups);
-      setPresets(permissionsResponse.data.presets);
+      setPermissionGroups(permissionsResponse.data.groups.map((group) => ({
+        ...group,
+        permissions: group.permissions.filter((permission) => !HIDDEN_PERMISSIONS.has(permission.key)),
+      })));
+      setPresets(Object.fromEntries(
+        Object.entries(permissionsResponse.data.presets).map(([role, permissions]) => [
+          role,
+          permissions.filter((permission) => !HIDDEN_PERMISSIONS.has(permission)),
+        ]),
+      ));
       setCustomRoles(customRolesResponse.data);
     } catch (e) { toast.error(formatApiError(e)); }
   };

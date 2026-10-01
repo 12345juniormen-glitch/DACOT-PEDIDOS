@@ -86,6 +86,7 @@ class OrderItemOut(BaseModel):
     product_id: str
     product_name: str
     unit_price: float
+    prep_time_seconds: int = 0
     quantity: int
     line_total: float
     notes: str
@@ -163,6 +164,7 @@ async def _build_items_snapshot(db, restaurant_id: str, items_input: list[OrderI
             "product_id": p["id"],
             "product_name": p["name"],
             "unit_price_cents": int(p["price_cents"]),
+            "prep_time_seconds": int(p.get("prep_time_seconds", 0)),
             "quantity": int(item.quantity),
             "notes": item.notes.strip(),
         })
@@ -175,6 +177,7 @@ def _to_out(doc: dict) -> OrderOut:
             product_id=i["product_id"],
             product_name=i["product_name"],
             unit_price=cents_to_reais(i["unit_price_cents"]),
+            prep_time_seconds=int(i.get("prep_time_seconds", 0)),
             quantity=i["quantity"],
             line_total=cents_to_reais(i["unit_price_cents"] * i["quantity"]),
             notes=i.get("notes", ""),

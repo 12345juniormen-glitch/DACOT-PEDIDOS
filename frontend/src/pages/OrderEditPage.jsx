@@ -1,7 +1,7 @@
 /* Order edit page — mirrors OrderCreatePage but loads existing order and PUTs. */
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Plus, Minus, Trash2, Search } from "lucide-react";
+import { Plus, Minus, Trash2, Search, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { api, formatApiError } from "@/lib/api";
 import { brl } from "@/lib/format";
+import { formatOrderPrepEstimate, formatPrepClock } from "@/lib/prepTime";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { toast } from "sonner";
 
@@ -54,6 +55,7 @@ export default function OrderEditPage() {
           product_id: i.product_id,
           name: i.product_name,
           unit_price: i.unit_price,
+          prep_time_seconds: i.prep_time_seconds || 0,
           quantity: i.quantity,
           notes: i.notes || "",
         })));
@@ -74,7 +76,14 @@ export default function OrderEditPage() {
     setItems((prev) => {
       const ex = prev.find((i) => i.product_id === p.id);
       if (ex) return prev.map((i) => (i.product_id === p.id ? { ...i, quantity: i.quantity + 1 } : i));
-      return [...prev, { product_id: p.id, name: p.name, unit_price: p.price, quantity: 1, notes: "" }];
+      return [...prev, {
+        product_id: p.id,
+        name: p.name,
+        unit_price: p.price,
+        prep_time_seconds: p.prep_time_seconds || 0,
+        quantity: 1,
+        notes: "",
+      }];
     });
   };
   const updateQty = (id, d) =>
@@ -85,6 +94,7 @@ export default function OrderEditPage() {
   const dv = Math.max(0, Number(discountValue) || 0);
   const discountAmount = discountType === "fixed" ? Math.min(dv, subtotal) : discountType === "percent" ? (subtotal * Math.min(100, dv)) / 100 : 0;
   const total = Math.max(0, subtotal - discountAmount);
+  const prepEstimate = formatOrderPrepEstimate(items);
 
   const submit = async () => {
     if (items.length === 0) return toast.error("Adicione pelo menos um item");
@@ -130,6 +140,11 @@ export default function OrderEditPage() {
                 <div className="font-medium text-sm truncate">{p.name}</div>
                 <div className="text-xs text-muted-foreground truncate">{p.category}</div>
                 <div className="text-sm font-semibold text-primary mt-1">{brl(p.price)}</div>
+                {p.prep_time_seconds > 0 && (
+                  <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
+                    <Clock className="h-3 w-3" /> {formatPrepClock(p.prep_time_seconds)}
+                  </div>
+                )}
               </button>
             ))}
           </div>
@@ -197,6 +212,7 @@ export default function OrderEditPage() {
             <div className="space-y-1.5 text-sm pt-1">
               <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{brl(subtotal)}</span></div>
               <div className="flex justify-between text-muted-foreground"><span>Desconto</span><span>− {brl(discountAmount)}</span></div>
+              {prepEstimate && <div className="flex justify-between text-muted-foreground"><span>Previsão de preparo</span><span className="font-medium text-foreground">{prepEstimate}</span></div>}
             </div>
             <div className="flex items-center justify-between rounded-md bg-accent/50 border border-primary/20 px-3 py-2.5">
               <span className="text-sm font-semibold text-foreground">Total</span>

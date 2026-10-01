@@ -22,11 +22,11 @@ import NotFoundPage from "@/pages/NotFoundPage";
 import "@/App.css";
 import { hasPermission } from "@/lib/permissions";
 
-function Shell({ children, permission, dashboardLayout = false }) {
+function Shell({ children, permission }) {
   return (
     <ProtectedRoute>
       <PermissionGuard permission={permission}>
-        <AppShell dashboardLayout={dashboardLayout}>{children}</AppShell>
+        <AppShell>{children}</AppShell>
       </PermissionGuard>
     </ProtectedRoute>
   );
@@ -55,8 +55,8 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/mudar-senha" element={<ForcedPwGuard />} />
-          <Route path="/" element={<Shell permission="dashboard.view" dashboardLayout><DashboardPage /></Shell>} />
-          <Route path="/:restaurantSlug" element={<Shell permission="dashboard.view" dashboardLayout><DashboardPage /></Shell>} />
+          <Route path="/" element={<Shell permission="dashboard.view"><DashboardPage /></Shell>} />
+          <Route path="/:restaurantSlug" element={<Shell permission="dashboard.view"><DashboardPage /></Shell>} />
           <Route path="/pedidos/novo" element={<Shell permission="orders.create"><OrderCreatePage /></Shell>} />
           <Route path="/pedidos/:id" element={<Shell permission="orders.view"><ErrorBoundary><OrderDetailPage /></ErrorBoundary></Shell>} />
           <Route path="/pedidos/:id/editar" element={<Shell permission="orders.edit"><OrderEditPage /></Shell>} />
