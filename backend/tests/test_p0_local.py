@@ -19,6 +19,8 @@ from modules.auth.seed import seed_admin_and_restaurant
 from modules.orders import routes as order_routes
 from modules.orders.routes import OrderStatusInput
 from core.deps import Tenant
+from core.hub_access import validate_handoff_configuration
+from core.permissions import permissions_for_role
 
 
 pytestmark = pytest.mark.skipif(
@@ -113,6 +115,84 @@ def test_admin_seed_does_not_replace_changed_password(monkeypatch):
     stored = asyncio.run(exercise())
     assert verify_password("changed-test-password", stored["password_hash"])
     assert not verify_password("initial-test-password", stored["password_hash"])
+
+
+def test_local_bootstrap_is_opt_in_and_never_runs_in_production(monkeypatch):
+    email = f"disabled-seed-{uuid.uuid4().hex}@example.com"
+    monkeypatch.setenv("ADMIN_EMAIL", email)
+    monkeypatch.setenv("ADMIN_PASSWORD", "not-used-password")
+    monkeypatch.delenv("ENABLE_LOCAL_BOOTSTRAP", raising=False)
+    asyncio.run(seed_admin_and_restaurant())
+    with MongoClient(os.environ["MONGO_URL"]) as client:
+        assert client[os.environ["DB_NAME"]].users.find_one({"email": email}) is None
+
+    monkeypatch.setenv("ENABLE_LOCAL_BOOTSTRAP", "true")
+    monkeypatch.setenv("APP_ENV", "production")
+    asyncio.run(seed_admin_and_restaurant())
+    with MongoClient(os.environ["MONGO_URL"]) as client:
+        assert client[os.environ["DB_NAME"]].users.find_one({"email": email}) is None
+
+
+def test_production_handoff_configuration_fails_closed(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("HANDOFF_JWT_SECRET", "h" * 48)
+    monkeypatch.setenv("JWT_SECRET", "j" * 48)
+    monkeypatch.setenv("HANDOFF_ISSUER", "dacot-hub")
+    monkeypatch.setenv("HANDOFF_AUDIENCE", "dacot-orders")
+    monkeypatch.setenv("HANDOFF_VERSION", "1")
+    monkeypatch.setenv("HANDOFF_MODULE_ID", "orders")
+    monkeypatch.setenv("MODULE_API_KEY", "m" * 48)
+    monkeypatch.delenv("HUB_MODULE_KEY", raising=False)
+    monkeypatch.setenv("HUB_BASE_URL", "https://hub.example.test")
+    monkeypatch.delenv("ENABLE_LOCAL_BOOTSTRAP", raising=False)
+    validate_handoff_configuration()
+
+    monkeypatch.setenv("HANDOFF_JWT_SECRET", "exposed-short-secret")
+    monkeypatch.setenv("HUB_BASE_URL", "http://hub.example.test/api")
+    with pytest.raises(RuntimeError) as error:
+        validate_handoff_configuration()
+    message = str(error.value)
+    assert "HANDOFF_JWT_SECRET" in message and "HUB_BASE_URL" in message
+    assert "exposed-short-secret" not in message
+
+
+def test_hub_handoff_role_downgrade_replaces_local_permissions():
+    tenant_id = uuid.uuid4().hex[:24]
+    hub_user_id = uuid.uuid4().hex
+
+    def exchange(role, version):
+        now = int(time.time())
+        handoff = jwt.encode({
+            "sub": f"tenant_user:{hub_user_id}", "restaurant_id": tenant_id,
+            "role": role, "module": "orders", "iss": os.environ["HANDOFF_ISSUER"],
+            "aud": os.environ["HANDOFF_AUDIENCE"], "iat": now, "nbf": now - 5,
+            "exp": now + 60, "jti": uuid.uuid4().hex, "handoff_version": 1,
+            "hub_access": {"user": version, "tenant": 1, "module": 1},
+        }, os.environ["HANDOFF_JWT_SECRET"], algorithm="HS256")
+        return requests.post(f"{API}/session/exchange", json={"handoff": handoff}, timeout=20)
+
+    first = exchange("admin", 1)
+    assert first.status_code == 200, first.text[:200]
+    local_user_id = first.json()["user"]["id"]
+    custom_role_id = uuid.uuid4().hex
+    with MongoClient(os.environ["MONGO_URL"]) as client:
+        client[os.environ["DB_NAME"]].users.update_one(
+            {"id": local_user_id},
+            {"$set": {"permissions": permissions_for_role("admin"),
+                      "custom_role_id": custom_role_id}},
+        )
+
+    downgraded = exchange("kitchen", 2)
+    assert downgraded.status_code == 200, downgraded.text[:200]
+    user = downgraded.json()["user"]
+    assert user["role"] == "kitchen"
+    assert user["custom_role_id"] is None
+    assert user["permissions"] == permissions_for_role("kitchen")
+
+    with MongoClient(os.environ["MONGO_URL"]) as client:
+        stored = client[os.environ["DB_NAME"]].users.find_one({"id": local_user_id})
+    assert stored["permissions"] == permissions_for_role("kitchen")
+    assert "custom_role_id" not in stored
 
 
 def test_status_write_rejects_concurrent_change(monkeypatch):

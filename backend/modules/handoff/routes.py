@@ -21,7 +21,7 @@ from pymongo.errors import DuplicateKeyError
 from core.db import get_db
 from core.security import create_access_token
 from core.hub_access import check_hub_access, validate_context
-from core.permissions import effective_permissions
+from core.permissions import effective_permissions, permissions_for_role
 
 
 ALLOWED_MODULE_IDS = {"orders", "pedidos"}
@@ -180,10 +180,23 @@ async def _find_or_create_user(restaurant_id: str, hub_user_id: str, role: str) 
     u = await db.users.find_one({"restaurant_id": restaurant_id, "hub_user_id": hub_user_id})
     now = datetime.now(timezone.utc).isoformat()
     if u:
-        # Update role if changed (Hub is authoritative)
-        if u.get("role") != role or not u.get("active", True):
+        if u.get("provisioned_by") == "hub_handoff":
+            # Hub identities always use the Hub role preset. Local overrides
+            # must not survive a role reduction performed in the Hub.
+            preset = permissions_for_role(role)
             await db.users.update_one(
-                {"id": u["id"]},
+                {"id": u["id"], "restaurant_id": restaurant_id},
+                {"$set": {"role": role, "active": True, "permissions": preset,
+                          "updated_at": now},
+                 "$unset": {"custom_role_id": ""}},
+            )
+            u["role"] = role
+            u["active"] = True
+            u["permissions"] = preset
+            u.pop("custom_role_id", None)
+        elif u.get("role") != role or not u.get("active", True):
+            await db.users.update_one(
+                {"id": u["id"], "restaurant_id": restaurant_id},
                 {"$set": {"role": role, "active": True, "updated_at": now}},
             )
             u["role"] = role
@@ -202,6 +215,7 @@ async def _find_or_create_user(restaurant_id: str, hub_user_id: str, role: str) 
         "password_hash": "",  # handoff-only, cannot log in via local /auth/login
         "name": f"Usuário Hub {hub_user_id[:8]}",
         "role": role,
+        "permissions": permissions_for_role(role),
         "active": True,
         "must_change_password": False,
         "created_at": now,

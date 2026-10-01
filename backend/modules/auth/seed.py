@@ -9,6 +9,9 @@ from core.security import hash_password
 
 
 async def seed_admin_and_restaurant() -> None:
+    enabled = os.environ.get("ENABLE_LOCAL_BOOTSTRAP", "").strip().lower() in {"1", "true", "yes", "on"}
+    if os.environ.get("APP_ENV", "production").strip().lower() == "production" or not enabled:
+        return
     db = get_db()
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@dacot.local").lower()
     admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")

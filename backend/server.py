@@ -17,6 +17,7 @@ from fastapi import APIRouter, FastAPI  # noqa: E402
 from starlette.middleware.cors import CORSMiddleware  # noqa: E402
 
 from core.db import close_db, get_db  # noqa: E402
+from core.hub_access import validate_handoff_configuration  # noqa: E402
 from modules.auth.routes import router as auth_router  # noqa: E402
 from modules.auth.seed import ensure_indexes, seed_admin_and_restaurant  # noqa: E402
 from modules.customers.routes import router as customers_router  # noqa: E402
@@ -87,6 +88,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
+    validate_handoff_configuration()
     # touch db
     _ = get_db()
     await ensure_indexes()

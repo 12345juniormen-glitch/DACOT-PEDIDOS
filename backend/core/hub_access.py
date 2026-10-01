@@ -16,6 +16,45 @@ _leases = OrderedDict()
 _locks = [asyncio.Lock() for _ in range(64)]
 
 
+def validate_handoff_configuration():
+    """Validate production integration settings without logging secret values."""
+    if os.environ.get("APP_ENV", "production").strip().lower() != "production":
+        return
+
+    errors = []
+    secret = os.environ.get("HANDOFF_JWT_SECRET", "")
+    if len(secret) < 32:
+        errors.append("HANDOFF_JWT_SECRET deve ter ao menos 32 caracteres")
+    if secret and secret == os.environ.get("JWT_SECRET"):
+        errors.append("HANDOFF_JWT_SECRET deve ser diferente de JWT_SECRET")
+    for name in ("HANDOFF_ISSUER", "HANDOFF_AUDIENCE", "HANDOFF_VERSION", "HANDOFF_MODULE_ID"):
+        if not os.environ.get(name, "").strip():
+            errors.append(f"{name} é obrigatório")
+    if os.environ.get("HANDOFF_VERSION") not in (None, "1"):
+        errors.append("HANDOFF_VERSION deve ser 1")
+    if os.environ.get("HANDOFF_MODULE_ID") not in (None, "orders"):
+        errors.append("HANDOFF_MODULE_ID deve ser orders")
+
+    values = {os.environ[n] for n in ("MODULE_API_KEY", "HUB_MODULE_KEY") if os.environ.get(n)}
+    if len(values) != 1 or len(next(iter(values), "")) < 32:
+        errors.append("MODULE_API_KEY deve ser única e ter ao menos 32 caracteres")
+
+    base = os.environ.get("HUB_BASE_URL", "").rstrip("/")
+    try:
+        parsed = urlsplit(base)
+        if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
+                or parsed.path not in ("", "/") or parsed.query or parsed.fragment
+                or "\\" in base or "*" in base):
+            raise ValueError()
+    except (ValueError, TypeError, AttributeError):
+        errors.append("HUB_BASE_URL deve ser uma origem HTTPS exata, sem caminho")
+
+    if os.environ.get("ENABLE_LOCAL_BOOTSTRAP", "").strip().lower() in {"1", "true", "yes", "on"}:
+        errors.append("ENABLE_LOCAL_BOOTSTRAP não pode ser habilitado em produção")
+    if errors:
+        raise RuntimeError("Configuração Hub → Pedidos inválida: " + "; ".join(errors))
+
+
 def validate_context(context):
     if (not isinstance(context, dict) or set(context) != {"user", "tenant", "module"}
             or any(type(v) is not int or v < 0 for v in context.values())):

@@ -204,6 +204,7 @@ def main():
         "ADMIN_EMAIL": f"admin-{test_id}@example.com",
         "ADMIN_PASSWORD": secrets.token_urlsafe(32),
         "DEFAULT_RESTAURANT_NAME": f"DACOT Integration {test_id}",
+        "ENABLE_LOCAL_BOOTSTRAP": "true",
         "REACT_APP_BACKEND_URL": f"http://127.0.0.1:{api_port}",
         "DACOT_LOCAL_INTEGRATION": "1",
         "WHATSAPP_PROVIDER_URL": f"http://127.0.0.1:{hub_port}",
@@ -250,6 +251,10 @@ def main():
                 selected = (["tests/backend_test.py", "tests/test_contact_import.py", "tests/test_p0_local.py", "tests/test_handoff_concurrency.py", "tests/test_order_history_audit.py", "tests/test_whatsapp.py"]
                             if args.all else ["tests/test_handoff_concurrency.py"] if args.handoff_only
                             else [
+                                "tests/test_p0_local.py::test_admin_seed_does_not_replace_changed_password",
+                                "tests/test_p0_local.py::test_local_bootstrap_is_opt_in_and_never_runs_in_production",
+                                "tests/test_p0_local.py::test_production_handoff_configuration_fails_closed",
+                                "tests/test_p0_local.py::test_hub_handoff_role_downgrade_replaces_local_permissions",
                                 "tests/test_p0_local.py::test_custom_permissions_and_optional_password_change",
                                 "tests/test_p0_local.py::test_custom_roles_are_tenant_scoped_and_safe_to_edit_or_delete",
                             ] if args.permissions_only
