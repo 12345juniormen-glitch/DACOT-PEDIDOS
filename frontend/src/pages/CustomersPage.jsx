@@ -114,7 +114,17 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      <CustomerFormDialog open={open} onOpenChange={setOpen} editing={editing} onSaved={load} />
+      <CustomerFormDialog
+        open={open}
+        onOpenChange={setOpen}
+        editing={editing}
+        onSaved={load}
+        onDeleted={(customer) => {
+          setEditing(null);
+          if (viewing?.id === customer.id) setViewing(null);
+          load();
+        }}
+      />
       <CustomerImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={load} />
       <CustomerDetailDialog open={!!viewing} onOpenChange={(v) => !v && setViewing(null)} customer={viewing} />
     </div>

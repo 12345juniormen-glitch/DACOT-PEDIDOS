@@ -130,6 +130,86 @@ def test_inbound_dedup_customer_lookup_and_tenant_isolation():
     assert not any(item["phone"] == phone for item in call("GET", "/whatsapp/conversations", other).json())
 
 
+def test_permanent_customer_delete_archives_whatsapp_and_preserves_order_history():
+    first_tenant, second_tenant = tenant_id(), tenant_id()
+    manager = session(first_tenant, "manager")
+    kitchen = session(first_tenant, "kitchen")
+    other_manager = session(second_tenant, "manager")
+    phone = "5511" + f"{uuid.uuid4().int % 100000000:08d}"
+
+    first_customer = call(
+        "POST", "/customers", manager,
+        json={"name": "Cliente para excluir", "phone": phone},
+    )
+    other_customer = call(
+        "POST", "/customers", other_manager,
+        json={"name": "Cliente de outro restaurante", "phone": phone},
+    )
+    assert first_customer.status_code == 201, first_customer.text
+    assert other_customer.status_code == 201, other_customer.text
+    first_customer = first_customer.json()
+    other_customer = other_customer.json()
+
+    assert provider_event(first_tenant, phone=phone, message_id="delete-a-" + uuid.uuid4().hex).status_code == 200
+    assert provider_event(second_tenant, phone=phone, message_id="delete-b-" + uuid.uuid4().hex).status_code == 200
+    first_conversation = next(
+        item for item in call("GET", "/whatsapp/conversations", manager).json()
+        if item["phone"] == phone
+    )
+    other_conversation = next(
+        item for item in call("GET", "/whatsapp/conversations", other_manager).json()
+        if item["phone"] == phone
+    )
+    assert first_conversation["customer_id"] == first_customer["id"]
+    assert other_conversation["customer_id"] == other_customer["id"]
+
+    product = call("POST", "/products", manager, json={"name": "Item histórico", "price": 14})
+    assert product.status_code == 201, product.text
+    order = call(
+        "POST", "/orders", manager,
+        json={
+            "customer_id": first_customer["id"],
+            "items": [{"product_id": product.json()["id"], "quantity": 1}],
+        },
+    )
+    assert order.status_code == 201, order.text
+    order = order.json()
+
+    assert call("DELETE", f"/customers/{first_customer['id']}/permanent", kitchen).status_code == 403
+    assert call("DELETE", f"/customers/{first_customer['id']}/permanent", other_manager).status_code == 404
+    deleted = call("DELETE", f"/customers/{first_customer['id']}/permanent", manager)
+    assert deleted.status_code == 204, deleted.text
+
+    assert call("GET", f"/customers/{first_customer['id']}", manager).status_code == 404
+    assert call("GET", f"/customers/{other_customer['id']}", other_manager).status_code == 200
+    assert all(
+        item["id"] != first_customer["id"]
+        for item in call("GET", "/customers", manager).json()
+    )
+
+    historical_order = call("GET", f"/orders/{order['id']}", manager)
+    assert historical_order.status_code == 200, historical_order.text
+    assert historical_order.json()["customer_id"] == first_customer["id"]
+    assert historical_order.json()["customer_name"] == "Cliente para excluir"
+
+    assert not any(
+        item["id"] == first_conversation["id"]
+        for item in call("GET", "/whatsapp/conversations", manager).json()
+    )
+    assert any(
+        item["id"] == other_conversation["id"]
+        for item in call("GET", "/whatsapp/conversations", other_manager).json()
+    )
+    archived = call("GET", f"/whatsapp/conversations/{first_conversation['id']}", manager)
+    assert archived.status_code == 200
+    assert archived.json()["customer_id"] is None
+    preserved_messages = call(
+        "GET", f"/whatsapp/conversations/{first_conversation['id']}/messages", manager,
+    )
+    assert preserved_messages.status_code == 200
+    assert preserved_messages.json()["total"] == 1
+
+
 def test_concurrent_provider_redelivery_is_idempotent():
     tenant = tenant_id()
     waiter = session(tenant)

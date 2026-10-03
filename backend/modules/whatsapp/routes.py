@@ -115,12 +115,18 @@ async def receive_provider_event(
         await db.wa_messages.insert_one(doc)
     except DuplicateKeyError:
         return {"ok": True}
-    changes = {"$max": {"last_inbound_at": at_iso, "last_message_at": at_iso}, "$inc": {"unread": 1}}
+    changes = {
+        "$max": {"last_inbound_at": at_iso, "last_message_at": at_iso},
+        "$inc": {"unread": 1},
+        "$unset": {"archived_at": "", "archived_reason": ""},
+    }
     fields = {}
     if event.profile_name:
         fields["profile_name"] = event.profile_name
     if customer:
         fields["customer_id"] = customer["id"]
+    else:
+        changes["$unset"]["customer_id"] = ""
     if fields:
         changes["$set"] = fields
     await db.wa_conversations.update_one(
@@ -150,7 +156,7 @@ async def disconnect_whatsapp(tenant: Tenant = Depends(require_permissions("what
 @router.get("/conversations")
 async def conversations(tenant: Tenant = Depends(require_permissions("whatsapp.view"))):
     docs = await get_db().wa_conversations.find(
-        {"restaurant_id": tenant.restaurant_id}, {"_id": 0}
+        {"restaurant_id": tenant.restaurant_id, "archived_at": {"$exists": False}}, {"_id": 0}
     ).sort("last_message_at", -1).limit(100).to_list(100)
     return [_conversation_out(doc) for doc in docs]
 

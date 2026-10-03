@@ -198,3 +198,49 @@ async def update_customer(customer_id: str, payload: CustomerInput, tenant: Tena
     if not result:
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
     return _to_out(result)
+
+
+@router.delete("/{customer_id}/permanent", status_code=204)
+async def permanently_delete_customer(
+    customer_id: str,
+    tenant: Tenant = Depends(require_permissions("customers.manage")),
+):
+    """Delete the current customer record without rewriting historical orders/messages."""
+    db = get_db()
+    customer_query = {"id": customer_id, "restaurant_id": tenant.restaurant_id}
+    customer = await db.customers.find_one(customer_query, {"_id": 1})
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Cliente não encontrado")
+
+    # Keep message history for audit, but remove the active customer association and
+    # hide those conversations from the inbox. A future inbound message clears this
+    # archive marker and safely reopens the conversation as an unlinked contact.
+    now = datetime.now(timezone.utc).isoformat()
+    await db.wa_conversations.update_many(
+        {"restaurant_id": tenant.restaurant_id, "customer_id": customer_id},
+        {
+            "$unset": {"customer_id": ""},
+            "$set": {
+                "archived_at": now,
+                "archived_reason": "customer_deleted",
+                "order_updates_opt_in": False,
+            },
+        },
+    )
+    result = await db.customers.delete_one(customer_query)
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Cliente não encontrado")
+    # Close a narrow race where an inbound event read the customer immediately
+    # before deletion and relinked the conversation after the first update.
+    await db.wa_conversations.update_many(
+        {"restaurant_id": tenant.restaurant_id, "customer_id": customer_id},
+        {
+            "$unset": {"customer_id": ""},
+            "$set": {
+                "archived_at": now,
+                "archived_reason": "customer_deleted",
+                "order_updates_opt_in": False,
+            },
+        },
+    )
+    return None
