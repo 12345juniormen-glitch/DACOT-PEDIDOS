@@ -105,6 +105,9 @@ async def ensure_indexes() -> None:
     await db.orders.create_index([("restaurant_id", 1), ("id", 1)], unique=True)
     await db.orders.create_index([("restaurant_id", 1), ("created_at", -1)])
     await db.orders.create_index([("restaurant_id", 1), ("status", 1), ("created_at", -1)])
+    # Revenue is grouped by delivery period, not creation period. This supports
+    # the aggregate-only Hub integration without scanning another tenant's data.
+    await db.orders.create_index([("restaurant_id", 1), ("status", 1), ("delivered_at", -1)])
     await db.orders.create_index([("restaurant_id", 1), ("customer_id", 1), ("created_at", -1)])
     await db.orders.create_index([("restaurant_id", 1), ("items.product_id", 1), ("created_at", -1)])
     await db.orders.create_index([("restaurant_id", 1), ("order_number", 1)], unique=True)

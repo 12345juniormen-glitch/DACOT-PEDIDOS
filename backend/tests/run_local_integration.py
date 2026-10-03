@@ -248,7 +248,7 @@ def main():
                 )
                 wait_ready(lambda: urlopen(f"http://127.0.0.1:{api_port}/api/health", timeout=1).read(), api, "API")
                 print("Isolated MongoDB, local Hub/provider stub and API ready on 127.0.0.1", flush=True)
-                selected = (["tests/backend_test.py", "tests/test_contact_import.py", "tests/test_p0_local.py", "tests/test_handoff_concurrency.py", "tests/test_order_history_audit.py", "tests/test_whatsapp.py"]
+                selected = (["tests/backend_test.py", "tests/test_contact_import.py", "tests/test_p0_local.py", "tests/test_handoff_concurrency.py", "tests/test_order_history_audit.py", "tests/test_whatsapp.py", "tests/test_analytics_revenue.py"]
                             if args.all else ["tests/test_handoff_concurrency.py"] if args.handoff_only
                             else [
                                 "tests/test_p0_local.py::test_admin_seed_does_not_replace_changed_password",

@@ -20,6 +20,7 @@ from core.db import close_db, get_db  # noqa: E402
 from core.hub_access import validate_handoff_configuration  # noqa: E402
 from modules.auth.routes import router as auth_router  # noqa: E402
 from modules.auth.seed import ensure_indexes, seed_admin_and_restaurant  # noqa: E402
+from modules.analytics.routes import router as analytics_router  # noqa: E402
 from modules.customers.routes import router as customers_router  # noqa: E402
 from modules.handoff.routes import compat_router, router as handoff_router  # noqa: E402
 from modules.orders.routes import router as orders_router  # noqa: E402
@@ -44,6 +45,7 @@ async def health():
 
 # Wire modules
 api_router.include_router(auth_router)
+api_router.include_router(analytics_router)
 api_router.include_router(restaurant_router)
 api_router.include_router(products_router)
 api_router.include_router(whatsapp_provider_router)
