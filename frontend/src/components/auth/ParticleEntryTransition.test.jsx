@@ -1,6 +1,11 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { useParticleEntryTransition } from "./ParticleEntryTransition";
+
+jest.mock("../ui/cursor-driven-particle-typography", () => ({
+  CursorDrivenParticleTypography: () => <canvas data-testid="particle-canvas" />,
+}));
+
+import { ParticleEntryTransition, useParticleEntryTransition } from "./ParticleEntryTransition";
 
 function Harness({ onComplete }) {
   const { animationState, startTransition, finishTransition } = useParticleEntryTransition(onComplete);
@@ -56,5 +61,14 @@ describe("transição de entrada compartilhada", () => {
     act(() => jest.advanceTimersByTime(800));
 
     expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  test("handoff usa uma camada fixa na viewport sem classe de posicionamento concorrente", () => {
+    act(() => root.render(<ParticleEntryTransition fixed animationState="loading" />));
+    const screen = container.firstElementChild;
+
+    expect(screen.classList.contains("fixed")).toBe(true);
+    expect(screen.classList.contains("inset-0")).toBe(true);
+    expect(screen.classList.contains("relative")).toBe(false);
   });
 });

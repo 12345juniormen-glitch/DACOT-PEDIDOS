@@ -65,7 +65,8 @@ function HandoffEntryGate({ children }) {
         <ParticleEntryTransition
           animationState={animationState === "idle" ? "loading" : animationState}
           onExplosionComplete={finishTransition}
-          className="fixed inset-0 z-[100]"
+          fixed
+          className="z-[100]"
         />
       )}
     </>

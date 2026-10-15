@@ -52,10 +52,11 @@ export function ParticleEntryTransition({
   animationState = "idle",
   onExplosionComplete,
   children,
+  fixed = false,
   className = "",
 }) {
   return (
-    <div className={`relative flex min-h-screen min-h-[100dvh] items-center justify-center overflow-hidden bg-background px-5 py-8 sm:px-8 ${className}`}>
+    <div className={`${fixed ? "fixed inset-0" : "relative"} flex min-h-screen min-h-[100dvh] items-center justify-center overflow-hidden bg-background px-5 py-8 sm:px-8 ${className}`}>
       <CursorDrivenParticleTypography
         text="DACOT"
         state={animationState}
