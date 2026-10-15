@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
-import { LayoutDashboard, ClipboardList, History, Package, Users, LogOut, UtensilsCrossed, ShieldCheck, UserCircle, ChefHat, HandPlatter, Menu, Search, MessageCircle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { LayoutDashboard, ClipboardList, History, Package, Users, LogOut, UtensilsCrossed, ShieldCheck, UserCircle, ChefHat, HandPlatter, Menu, Search, MessageCircle, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -8,6 +8,7 @@ import { GlobalSearchDialog } from "@/components/GlobalSearchDialog";
 import { hasAnyPermission, hasPermission } from "@/lib/permissions";
 
 const ROLE_LABEL = { admin: "Administrador", manager: "Gerente", waiter: "Atendimento", kitchen: "Cozinha" };
+const OPERATIONAL_SIDEBAR_STORAGE_KEY = "dacot:operational-sidebar-collapsed";
 
 const NAV_ALL = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard", end: true, permission: "dashboard.view" },
@@ -24,50 +25,103 @@ const NAV_ALL = [
 export function AppShell({ children }) {
   const { user, logout } = useAuth();
   const nav = useNavigate();
+  const location = useLocation();
   const items = NAV_ALL.filter((n) => hasPermission(user, n.permission));
   const canSearch = hasAnyPermission(user, ["orders.view", "customers.view", "products.view"]);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [operationalSidebarCollapsed, setOperationalSidebarCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem(OPERATIONAL_SIDEBAR_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+  const isOperationalScreen = location.pathname === "/cozinha" || location.pathname.startsWith("/garcom");
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(OPERATIONAL_SIDEBAR_STORAGE_KEY, String(operationalSidebarCollapsed));
+    } catch {
+      // A navegação continua funcional mesmo quando o navegador bloqueia armazenamento local.
+    }
+  }, [operationalSidebarCollapsed]);
 
   const onLogout = async () => { await logout(); nav("/login", { replace: true }); };
 
   return (
     <div className="min-h-screen flex bg-background">
-      <aside data-testid="app-sidebar" className="hidden md:flex md:w-64 flex-col border-r bg-card">
-        <div className="h-16 flex items-center gap-2 px-6 border-b">
-          <div className="w-9 h-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center"><UtensilsCrossed className="w-5 h-5" /></div>
-          <div><div className="font-display font-extrabold text-lg leading-none tracking-tight">DACOT</div><div className="text-[11px] text-muted-foreground mt-0.5">Módulo de Pedidos</div></div>
-        </div>
-        {canSearch && <div className="px-3 pt-3">
-          <button
-            onClick={() => setSearchOpen(true)}
-            data-testid="global-search-trigger"
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/50 text-sm text-muted-foreground hover:bg-muted transition-colors"
-          >
-            <Search className="w-4 h-4 shrink-0" />
-            <span className="truncate">Buscar pedidos, clientes ou produtos...</span>
-          </button>
-        </div>}
-        <nav className="flex-1 p-3 space-y-1">
-          {items.map(({ to, label, icon: Icon, testid, end }) => (
-            <NavLink key={to} to={to} end={end} data-testid={testid}
-              className={({ isActive }) => `flex items-center gap-3 pl-2.5 pr-3 py-2 rounded-md text-sm font-medium border-l-2 transition-colors ${isActive ? "border-primary bg-accent/60 text-foreground" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
-              <Icon className="w-4 h-4" />{label}
+      <aside
+        data-testid="app-sidebar"
+        aria-hidden={isOperationalScreen && operationalSidebarCollapsed}
+        inert={isOperationalScreen && operationalSidebarCollapsed ? true : undefined}
+        className={`hidden shrink-0 overflow-hidden bg-card transition-[width,border-color] duration-200 ease-out md:flex ${
+          isOperationalScreen && operationalSidebarCollapsed
+            ? "md:w-0 border-r-0"
+            : "md:w-64 border-r"
+        }`}
+      >
+        <div className="flex min-h-screen w-64 shrink-0 flex-col">
+          <div className="h-16 flex items-center gap-2 px-4 border-b">
+            <div className="w-9 h-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center"><UtensilsCrossed className="w-5 h-5" /></div>
+            <div className="min-w-0 flex-1"><div className="font-display font-extrabold text-lg leading-none tracking-tight">DACOT</div><div className="text-[11px] text-muted-foreground mt-0.5">Módulo de Pedidos</div></div>
+            {isOperationalScreen && (
+              <button
+                type="button"
+                onClick={() => setOperationalSidebarCollapsed(true)}
+                data-testid="collapse-operational-sidebar"
+                aria-label="Recolher menu lateral"
+                title="Recolher menu lateral"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {canSearch && <div className="px-3 pt-3">
+            <button
+              onClick={() => setSearchOpen(true)}
+              data-testid="global-search-trigger"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/50 text-sm text-muted-foreground hover:bg-muted transition-colors"
+            >
+              <Search className="w-4 h-4 shrink-0" />
+              <span className="truncate">Buscar pedidos, clientes ou produtos...</span>
+            </button>
+          </div>}
+          <nav className="flex-1 p-3 space-y-1">
+            {items.map(({ to, label, icon: Icon, testid, end }) => (
+              <NavLink key={to} to={to} end={end} data-testid={testid}
+                className={({ isActive }) => `flex items-center gap-3 pl-2.5 pr-3 py-2 rounded-md text-sm font-medium border-l-2 transition-colors ${isActive ? "border-primary bg-accent/60 text-foreground" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+                <Icon className="w-4 h-4" />{label}
+              </NavLink>
+            ))}
+          </nav>
+          <div className="border-t p-3">
+            <NavLink to="/meu-perfil" className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-muted" data-testid="nav-profile">
+              <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-accent-foreground text-xs font-semibold shrink-0">{(user?.name || "?").slice(0, 1).toUpperCase()}</div>
+              <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{user?.name}</div><div className="text-xs text-muted-foreground truncate">{user?.custom_role_name || ROLE_LABEL[user?.role]}</div></div>
+              <UserCircle className="w-4 h-4 text-muted-foreground" />
             </NavLink>
-          ))}
-        </nav>
-        <div className="border-t p-3">
-          <NavLink to="/meu-perfil" className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-muted" data-testid="nav-profile">
-            <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-accent-foreground text-xs font-semibold shrink-0">{(user?.name || "?").slice(0, 1).toUpperCase()}</div>
-            <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{user?.name}</div><div className="text-xs text-muted-foreground truncate">{user?.custom_role_name || ROLE_LABEL[user?.role]}</div></div>
-            <UserCircle className="w-4 h-4 text-muted-foreground" />
-          </NavLink>
-          <div className="mt-2 flex items-center gap-1">
-            <button data-testid="logout-button" onClick={onLogout} className="flex-1 flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded"><LogOut className="w-3.5 h-3.5" /> Sair</button>
-            <ThemeToggle />
+            <div className="mt-2 flex items-center gap-1">
+              <button data-testid="logout-button" onClick={onLogout} className="flex-1 flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded"><LogOut className="w-3.5 h-3.5" /> Sair</button>
+              <ThemeToggle />
+            </div>
           </div>
         </div>
       </aside>
+
+      {isOperationalScreen && operationalSidebarCollapsed && (
+        <button
+          type="button"
+          onClick={() => setOperationalSidebarCollapsed(false)}
+          data-testid="expand-operational-sidebar"
+          aria-label="Abrir menu lateral"
+          title="Abrir menu lateral"
+          className="fixed left-3 top-3 z-30 hidden h-9 w-9 items-center justify-center rounded-md border bg-card text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
+        >
+          <PanelLeftOpen className="h-4 w-4" />
+        </button>
+      )}
 
       <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-card border-b z-40 flex items-center px-4 gap-2">
         <button

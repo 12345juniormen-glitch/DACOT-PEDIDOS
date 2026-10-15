@@ -1,16 +1,16 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { UtensilsCrossed, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { STATUS_ICON } from "@/components/StatusBadge";
 import { useAuth } from "@/context/AuthContext";
 import { useDocumentTitle } from "@/hooks/use-document-title";
-import { STATUS_LABEL } from "@/lib/format";
+import { CursorDrivenParticleTypography } from "@/components/ui/cursor-driven-particle-typography";
 import { toast } from "sonner";
 
-const FLOW = ["new", "in_preparation", "ready", "delivered"];
+const MIN_TRANSITION_MS = 600;
+const EXPLOSION_FALLBACK_MS = 800;
 
 export default function LoginPage() {
   useDocumentTitle("Login");
@@ -20,28 +20,82 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(handoffError || "");
+  const [animationState, setAnimationState] = useState("idle");
+  const acceptedAtRef = useRef(0);
+  const loginAttemptRef = useRef(false);
+  const navigationCompletedRef = useRef(false);
 
-  if (user && typeof user === "object") return <Navigate to="/" replace />;
+  const finishNavigation = useCallback(() => {
+    if (navigationCompletedRef.current) return;
+    navigationCompletedRef.current = true;
+    toast.success("Bem-vindo ao DACOT");
+    nav("/", { replace: true });
+  }, [nav]);
+
+  useEffect(() => {
+    if (animationState !== "loading" || !user || typeof user !== "object") return undefined;
+    const elapsed = Date.now() - acceptedAtRef.current;
+    const timer = window.setTimeout(
+      () => setAnimationState("explode"),
+      Math.max(0, MIN_TRANSITION_MS - elapsed),
+    );
+    return () => window.clearTimeout(timer);
+  }, [animationState, user]);
+
+  useEffect(() => {
+    if (animationState !== "explode") return undefined;
+    const fallback = window.setTimeout(finishNavigation, EXPLOSION_FALLBACK_MS);
+    return () => window.clearTimeout(fallback);
+  }, [animationState, finishNavigation]);
+
+  if (user && typeof user === "object" && !loginAttemptRef.current) {
+    return <Navigate to="/" replace />;
+  }
 
   const submit = async (e) => {
     e.preventDefault();
+    if (loading || animationState !== "idle") return;
+    loginAttemptRef.current = true;
     setLoading(true);
     setError("");
     const res = await login(email, password);
     setLoading(false);
-    if (res.ok) {
-      toast.success("Bem-vindo ao DACOT");
-      nav("/", { replace: true });
+    if (res.ok && res.user && typeof res.user === "object") {
+      acceptedAtRef.current = Date.now();
+      document.activeElement?.blur();
+      setAnimationState("loading");
     } else {
-      setError(res.error);
+      loginAttemptRef.current = false;
+      setError(res.error || "Não foi possível carregar os dados do restaurante. Tente novamente.");
     }
   };
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-background">
-      {/* Left panel: form */}
-      <div className="flex items-center justify-center p-6 sm:p-12">
-        <div className="w-full max-w-sm">
+    <div className="relative flex min-h-screen min-h-[100dvh] items-center justify-center overflow-hidden bg-background px-5 py-8 sm:px-8">
+      <CursorDrivenParticleTypography
+        text="DACOT"
+        state={animationState}
+        onExplosionComplete={finishNavigation}
+        className={`absolute inset-0 z-0 transition-opacity duration-300 ${
+          animationState === "idle" ? "opacity-35 dark:opacity-45" : "opacity-90 dark:opacity-100"
+        }`}
+      />
+      <div
+        className={`pointer-events-none absolute inset-0 z-[1] bg-background transition-opacity duration-300 ${
+          animationState === "idle" ? "opacity-25 dark:opacity-15" : "opacity-5"
+        }`}
+        aria-hidden="true"
+      />
+
+      <main
+        aria-hidden={animationState !== "idle"}
+        className={`relative z-10 w-full max-w-md rounded-xl border border-border/80 bg-card/95 p-6 shadow-2xl shadow-black/15 backdrop-blur-sm transition-all duration-300 sm:p-8 dark:shadow-black/40 ${
+          animationState === "idle"
+            ? "scale-100 opacity-100"
+            : "pointer-events-none scale-95 opacity-0"
+        }`}
+      >
+        <div className="w-full">
           <div className="flex items-center gap-2 mb-8">
             <div className="w-10 h-10 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
               <UtensilsCrossed className="w-5 h-5" />
@@ -92,43 +146,14 @@ export default function LoginPage() {
             <Button
               type="submit"
               data-testid="login-submit-button"
-              disabled={loading}
+              disabled={loading || animationState !== "idle"}
               className="w-full"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Entrar"}
             </Button>
           </form>
         </div>
-      </div>
-
-      {/* Right panel: identidade — sólido, sem gradiente; o laranja aparece só como acento */}
-      <div className="hidden lg:flex items-center justify-center bg-slate-900 text-white p-12">
-        <div className="max-w-sm">
-          <div className="w-11 h-11 rounded-md bg-primary text-primary-foreground flex items-center justify-center mb-6">
-            <UtensilsCrossed className="w-5 h-5" />
-          </div>
-          <h2 className="font-display text-2xl font-bold leading-snug">
-            Gestão de pedidos para o salão e a cozinha.
-          </h2>
-          <p className="text-slate-400 mt-3 text-sm leading-relaxed">
-            Cada pedido acompanhado do início ao fim, com preço registrado no momento da venda e histórico sempre disponível.
-          </p>
-          <ol className="mt-10 space-y-3">
-            {FLOW.map((s, idx) => {
-              const Icon = STATUS_ICON[s];
-              return (
-                <li key={s} className="flex items-center gap-3 text-sm text-slate-300">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 text-xs font-semibold text-slate-400 shrink-0">
-                    {idx + 1}
-                  </span>
-                  <Icon className="w-4 h-4 text-primary shrink-0" />
-                  <span>{STATUS_LABEL[s]}</span>
-                </li>
-              );
-            })}
-          </ol>
-        </div>
-      </div>
+      </main>
     </div>
   );
 }

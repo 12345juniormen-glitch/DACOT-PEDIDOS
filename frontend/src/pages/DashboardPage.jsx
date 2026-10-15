@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { Plus, RefreshCw, ChevronRight, Clock, ChefHat, ArrowRight, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/PageHeader";
-import { EmptyState } from "@/components/EmptyState";
 import { DashboardMetricDialog } from "@/components/DashboardMetricDialog";
 import { STATUS_ICON } from "@/components/StatusBadge";
 import { api, formatApiError } from "@/lib/api";
@@ -124,41 +123,6 @@ export default function DashboardPage() {
         </Link>
       )}
 
-      {/* Operação agora — resumo por status para quem não abre a Cozinha (ex.: gerente),
-          com os mesmos pedidos ativos já carregados e o mesmo limiar de atenção do KDS. */}
-      <section className="mb-6" data-testid="ops-now">
-        <SectionTitle>Operação agora</SectionTitle>
-        <div className="flex flex-col sm:flex-row gap-3">
-          {COLUMNS.map((col) => {
-            const Icon = STATUS_ICON[col.key];
-            return (
-              <div
-                key={col.key}
-                className="flex-1 cursor-default bg-card border rounded-lg px-4 py-3 flex items-center justify-between gap-3 shadow-none"
-                data-testid={`ops-now-${col.key}`}
-              >
-                <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  {Icon && <Icon className="w-4 h-4 text-muted-foreground" />} {col.label}
-                </span>
-                <span className="font-display text-xl font-bold text-foreground">{byStatus[col.key].length}</span>
-              </div>
-            );
-          })}
-        </div>
-        {attentionCount > 0 && (
-          <div
-            className="mt-3 flex cursor-default items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 shadow-none dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
-            data-testid="ops-now-attention"
-          >
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            <span>
-              <span className="font-semibold">⚠ Atenção · </span>
-              {attentionCount} pedido{attentionCount !== 1 ? "s" : ""} em preparo há mais de 20 min
-            </span>
-          </div>
-        )}
-      </section>
-
       {/* Indicadores principais — sempre corretos para qualquer papel, calculados a partir dos pedidos ativos já
           carregados (não repetem a contagem por status, que já aparece nas colunas logo abaixo) */}
       <div className="grid grid-cols-2 gap-3 mb-6 max-w-md">
@@ -166,63 +130,106 @@ export default function DashboardPage() {
         <Indicator label="Prontos p/ entrega" value={byStatus.ready.length} highlight={byStatus.ready.length > 0} testid="metric-ready" />
       </div>
 
+      {attentionCount > 0 && (
+        <div
+          className="mb-6 flex cursor-default items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 shadow-none dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+          data-testid="ops-now-attention"
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>
+            <span className="font-semibold">Atenção · </span>
+            {attentionCount} pedido{attentionCount !== 1 ? "s" : ""} em preparo há mais de 20 min
+          </span>
+        </div>
+      )}
+
       {/* Situação atual dos pedidos */}
       <section className="mb-6">
         <SectionTitle>Situação atual dos pedidos</SectionTitle>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {COLUMNS.map((col) => (
-            <div key={col.key} className="bg-card border rounded-lg overflow-hidden flex flex-col" data-testid={`column-${col.key}`}>
-              <div className="px-4 py-3 border-b flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex cursor-default items-center gap-1.5 text-xs font-semibold text-foreground">
-                    <span className={`h-2 w-2 rounded-full ${col.key === "new" ? "bg-blue-500" : col.key === "in_preparation" ? "bg-orange-500" : "bg-emerald-500"}`} />
-                    {col.label}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {byStatus[col.key].length} pedido{byStatus[col.key].length !== 1 ? "s" : ""}
-                  </span>
-                </div>
-              </div>
-              <div className="p-3 space-y-2 min-h-[160px] max-h-[calc(100vh-420px)] overflow-y-auto">
-                {byStatus[col.key].length === 0 && (
-                  <div className="text-center text-sm text-muted-foreground py-10">Sem pedidos</div>
-                )}
-                {byStatus[col.key].map((o) => (
-                  <div key={o.id} className="cursor-default border rounded-md p-3 bg-card shadow-none" data-testid={`order-card-${o.order_number}`}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <Link to={`/pedidos/${o.id}`} className="font-display font-semibold text-foreground hover:text-primary">
-                        #{o.order_number}
-                      </Link>
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> {formatTime(o.created_at)}
-                      </span>
+        <div className="-mx-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+          <div className="grid grid-flow-col auto-cols-[minmax(280px,86vw)] gap-4 lg:grid-flow-row lg:grid-cols-3 lg:auto-cols-auto">
+            {COLUMNS.map((col) => {
+              const Icon = STATUS_ICON[col.key];
+              const statusColor = col.key === "new"
+                ? "bg-blue-500"
+                : col.key === "in_preparation"
+                  ? "bg-orange-500"
+                  : "bg-emerald-500";
+              return (
+                <div
+                  key={col.key}
+                  className="flex min-h-[190px] flex-col overflow-hidden rounded-md border border-border bg-muted/35"
+                  data-testid={`column-${col.key}`}
+                >
+                  <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className={`h-2.5 w-2.5 rounded-full ${statusColor}`} aria-hidden="true" />
+                      {Icon && <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+                      <h3 className="text-sm font-semibold text-foreground">{col.label}</h3>
                     </div>
-                    <div className="text-sm text-foreground truncate">
-                      {o.customer_name || <span className="text-muted-foreground italic">Sem cliente</span>}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {o.items.length} ite{o.items.length !== 1 ? "ns" : "m"} · {brl(o.total)}
-                    </div>
-                    {NEXT_STATUS[o.status] && (canOrderStatus || (canKdsStatus && NEXT_STATUS[o.status] !== "delivered")) && (
-                      <button
-                        onClick={() => advance(o)}
-                        data-testid={`advance-${o.order_number}`}
-                        className="mt-2 flex w-full cursor-pointer items-center justify-center gap-1 rounded px-2 py-2.5 text-xs font-medium text-primary hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        Avançar para {STATUS_LABEL[NEXT_STATUS[o.status]]} <ChevronRight className="w-3 h-3" />
-                      </button>
-                    )}
+                    <span className="tabular-nums text-sm font-semibold text-muted-foreground">
+                      {byStatus[col.key].length}
+                    </span>
                   </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-        {!loading && orders.length === 0 && (
-          <div className="mt-4">
-            <EmptyState title="Nenhum pedido ativo no momento" description="Novos pedidos aparecem aqui assim que forem criados." />
+
+                  <div className="flex max-h-[calc(100vh-390px)] min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2.5">
+                    {byStatus[col.key].length === 0 && (
+                      <p className="px-2 py-5 text-center text-xs text-muted-foreground">Sem pedidos neste status</p>
+                    )}
+                    {byStatus[col.key].map((o) => (
+                      <article
+                        key={o.id}
+                        className="cursor-default rounded border border-border bg-card p-3 shadow-sm"
+                        data-testid={`order-card-${o.order_number}`}
+                      >
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <Link
+                            to={`/pedidos/${o.id}`}
+                            className="font-display text-base font-bold text-foreground underline-offset-4 hover:text-primary hover:underline focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            #{o.order_number}
+                          </Link>
+                          <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums text-muted-foreground">
+                            <Clock className="h-3.5 w-3.5" /> {formatTime(o.created_at)}
+                          </span>
+                        </div>
+
+                        <div className="mb-2 truncate text-sm font-medium text-foreground">
+                          {o.customer_name || <span className="font-normal italic text-muted-foreground">Sem cliente</span>}
+                        </div>
+
+                        <ul className="space-y-1 border-t border-border/70 pt-2 text-xs text-muted-foreground">
+                          {o.items.map((item, index) => (
+                            <li key={`${item.product_name}-${index}`} className="flex min-w-0 items-baseline gap-1.5">
+                              <span className="shrink-0 font-semibold tabular-nums text-foreground">{item.quantity}×</span>
+                              <span className="truncate">{item.product_name}</span>
+                            </li>
+                          ))}
+                        </ul>
+
+                        {o.notes && (
+                          <p className="mt-2 line-clamp-2 border-l-2 border-amber-400 pl-2 text-xs text-muted-foreground">
+                            {o.notes}
+                          </p>
+                        )}
+
+                        {NEXT_STATUS[o.status] && (canOrderStatus || (canKdsStatus && NEXT_STATUS[o.status] !== "delivered")) && (
+                          <button
+                            onClick={() => advance(o)}
+                            data-testid={`advance-${o.order_number}`}
+                            className="mt-3 flex w-full cursor-pointer items-center justify-center gap-1 rounded border border-primary/30 px-2 py-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            Avançar para {STATUS_LABEL[NEXT_STATUS[o.status]]} <ChevronRight className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        )}
+        </div>
       </section>
 
       {/* Informações de vendas e desempenho operacional do dia — só para quem enxerga
