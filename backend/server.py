@@ -25,6 +25,7 @@ from modules.customers.routes import router as customers_router  # noqa: E402
 from modules.handoff.routes import compat_router, router as handoff_router  # noqa: E402
 from modules.orders.routes import router as orders_router  # noqa: E402
 from modules.products.routes import router as products_router  # noqa: E402
+from modules.provisioning.routes import router as provisioning_router  # noqa: E402
 from modules.whatsapp.routes import provider_router as whatsapp_provider_router, router as whatsapp_router  # noqa: E402
 from modules.restaurants.routes import router as restaurant_router  # noqa: E402
 from modules.users.routes import router as users_router  # noqa: E402
@@ -45,6 +46,7 @@ async def health():
 
 # Wire modules
 api_router.include_router(auth_router)
+api_router.include_router(provisioning_router)
 api_router.include_router(analytics_router)
 api_router.include_router(restaurant_router)
 api_router.include_router(products_router)

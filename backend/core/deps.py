@@ -54,7 +54,8 @@ async def get_current_user(request: Request) -> dict:
     user["permissions"] = effective_permissions(user)
 
     # If password change is required, only allow a small allow-list of routes.
-    if user.get("must_change_password") and request.url.path not in _PW_LOCK_ALLOWED_PATHS:
+    if (user.get("must_change_password") and payload.get("hub_access") is None
+            and request.url.path not in _PW_LOCK_ALLOWED_PATHS):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Troca de senha obrigatória",

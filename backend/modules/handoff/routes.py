@@ -180,7 +180,7 @@ async def _find_or_create_user(restaurant_id: str, hub_user_id: str, role: str) 
     u = await db.users.find_one({"restaurant_id": restaurant_id, "hub_user_id": hub_user_id})
     now = datetime.now(timezone.utc).isoformat()
     if u:
-        if u.get("provisioned_by") == "hub_handoff":
+        if u.get("provisioned_by") in {"hub", "hub_handoff"}:
             # Hub identities always use the Hub role preset. Local overrides
             # must not survive a role reduction performed in the Hub.
             preset = permissions_for_role(role)

@@ -11,6 +11,7 @@ from core.db import get_db
 from core.deps import get_current_user
 from core.security import create_access_token, hash_password, verify_password
 from core.permissions import effective_permissions
+from core.hub_access import fetch_hub_access_context
 
 
 UserRole = Literal["admin", "manager", "waiter", "kitchen"]
@@ -24,6 +25,11 @@ class LoginInput(BaseModel):
 class ChangePasswordInput(BaseModel):
     current_password: str = Field(min_length=1)
     new_password: str = Field(min_length=6, max_length=128)
+
+
+class FirstAccessInput(BaseModel):
+    token: str = Field(min_length=20, max_length=512)
+    password: str = Field(min_length=6, max_length=128)
 
 
 class UserPublic(BaseModel):
@@ -46,6 +52,33 @@ class LoginResponse(BaseModel):
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.post("/first-access")
+async def first_access(payload: FirstAccessInput):
+    db = get_db()
+    now = datetime.now(timezone.utc)
+    token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
+    invitation = await db.first_access_tokens.find_one_and_update(
+        {"token_hash": token_hash, "used": False, "expires_at": {"$gt": now}},
+        {"$set": {"used": True, "used_at": now}},
+        return_document=ReturnDocument.BEFORE,
+    )
+    if not invitation:
+        raise HTTPException(400, "Convite inválido ou expirado")
+    result = await db.users.update_one(
+        {"id": invitation["user_id"], "restaurant_id": invitation["restaurant_id"],
+         "hub_user_id": {"$exists": True}, "provisioned_by": {"$in": ["hub", "hub_handoff"]}},
+        {"$set": {"password_hash": hash_password(payload.password),
+                  "must_change_password": False, "updated_at": now.isoformat()}},
+    )
+    if result.matched_count != 1:
+        raise HTTPException(400, "Convite inválido ou expirado")
+    await db.first_access_tokens.update_many(
+        {"user_id": invitation["user_id"], "restaurant_id": invitation["restaurant_id"], "used": False},
+        {"$set": {"used": True, "invalidated_at": now}},
+    )
+    return {"ok": True}
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -79,11 +112,17 @@ async def login(payload: LoginInput, request: Request):
         # Mesma mensagem genérica de credenciais inválidas: não revela que a conta existe e está desativada.
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email ou senha inválidos")
 
+    hub_access = None
+    if user.get("hub_user_id"):
+        hub_access = await fetch_hub_access_context(
+            user["restaurant_id"], user["hub_user_id"], user.get("role", "admin")
+        )
     token = create_access_token(
         user_id=user["id"],
         restaurant_id=user["restaurant_id"],
         role=user.get("role", "admin"),
         email=user["email"],
+        hub_access=hub_access,
     )
     user.pop("_id", None)
     user.pop("password_hash", None)

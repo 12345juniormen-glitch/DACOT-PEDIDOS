@@ -5,6 +5,7 @@ import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { AppShell } from "@/components/layout/AppShell";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import LoginPage from "@/pages/LoginPage";
+import FirstAccessPage from "@/pages/FirstAccessPage";
 import DashboardPage from "@/pages/DashboardPage";
 import OrderCreatePage from "@/pages/OrderCreatePage";
 import OrderDetailPage from "@/pages/OrderDetailPage";
@@ -54,6 +55,7 @@ function App() {
         <Toaster position="top-right" richColors />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/primeiro-acesso" element={<FirstAccessPage />} />
           <Route path="/mudar-senha" element={<ForcedPwGuard />} />
           <Route path="/" element={<Shell permission="dashboard.view"><DashboardPage /></Shell>} />
           <Route path="/:restaurantSlug" element={<Shell permission="dashboard.view"><DashboardPage /></Shell>} />

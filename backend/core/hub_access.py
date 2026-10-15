@@ -110,3 +110,30 @@ async def check_hub_access(restaurant_id, hub_user_id, role, context, *, fresh=F
         _leases[key] = started + LEASE_SECONDS
         while len(_leases) > MAX_ENTRIES:
             _leases.popitem(last=False)
+
+
+async def fetch_hub_access_context(restaurant_id, hub_user_id, role):
+    """Fetch the authoritative version tuple used by direct-login sessions."""
+    base = os.environ.get("HUB_BASE_URL", "").rstrip("/")
+    if (not restaurant_id or len(restaurant_id) != 24
+            or not all(c in "0123456789abcdefABCDEF" for c in restaurant_id)):
+        raise HTTPException(503, "Não foi possível confirmar acesso no Hub; tente novamente")
+    try:
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=False) as client:
+            result = await client.post(
+                f"{base}/api/public/tenants/{restaurant_id}/modules/orders/access-context",
+                headers={"X-Module-Key": module_api_key()},
+                json={"subject": f"tenant_user:{hub_user_id}", "role": role},
+            )
+        if result.status_code != 200:
+            raise ValueError()
+        body = result.json()
+        if body.get("active") is False:
+            raise HTTPException(403, "Acesso revogado no Hub")
+        context = body.get("hub_access")
+        validate_context(context)
+        return context
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError, AttributeError):
+        raise HTTPException(503, "Não foi possível confirmar acesso no Hub; tente novamente")
