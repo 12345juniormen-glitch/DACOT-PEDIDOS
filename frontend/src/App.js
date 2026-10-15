@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
@@ -22,6 +23,7 @@ import WhatsAppPage from "@/pages/WhatsAppPage";
 import NotFoundPage from "@/pages/NotFoundPage";
 import "@/App.css";
 import { hasPermission } from "@/lib/permissions";
+import { ParticleEntryTransition, useParticleEntryTransition } from "@/components/auth/ParticleEntryTransition";
 
 function Shell({ children, permission }) {
   return (
@@ -48,31 +50,55 @@ function ForcedPwGuard() {
   return <ChangePasswordPage forced={!!user.must_change_password} />;
 }
 
+function HandoffEntryGate({ children }) {
+  const { handoffEntryPending, completeHandoffEntry } = useAuth();
+  const { animationState, startTransition, finishTransition } = useParticleEntryTransition(completeHandoffEntry);
+
+  useEffect(() => {
+    if (handoffEntryPending && animationState === "idle") startTransition();
+  }, [animationState, handoffEntryPending, startTransition]);
+
+  return (
+    <>
+      {children}
+      {handoffEntryPending && (
+        <ParticleEntryTransition
+          animationState={animationState === "idle" ? "loading" : animationState}
+          onExplosionComplete={finishTransition}
+          className="fixed inset-0 z-[100]"
+        />
+      )}
+    </>
+  );
+}
+
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Toaster position="top-right" richColors />
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/primeiro-acesso" element={<FirstAccessPage />} />
-          <Route path="/mudar-senha" element={<ForcedPwGuard />} />
-          <Route path="/" element={<Shell permission="dashboard.view"><DashboardPage /></Shell>} />
-          <Route path="/:restaurantSlug" element={<Shell permission="dashboard.view"><DashboardPage /></Shell>} />
-          <Route path="/pedidos/novo" element={<Shell permission="orders.create"><OrderCreatePage /></Shell>} />
-          <Route path="/pedidos/:id" element={<Shell permission="orders.view"><ErrorBoundary><OrderDetailPage /></ErrorBoundary></Shell>} />
-          <Route path="/pedidos/:id/editar" element={<Shell permission="orders.edit"><OrderEditPage /></Shell>} />
-          <Route path="/historico" element={<Shell permission="history.view"><OrdersHistoryPage /></Shell>} />
-          <Route path="/produtos" element={<Shell permission="products.view"><ProductsPage /></Shell>} />
-          <Route path="/clientes" element={<Shell permission="customers.view"><CustomersPage /></Shell>} />
-          <Route path="/usuarios" element={<Shell permission="users.view"><UsersPage /></Shell>} />
-          <Route path="/cozinha" element={<Shell permission="kds.view"><KitchenPage /></Shell>} />
-          <Route path="/garcom" element={<Shell permission="service.view"><WaiterPage /></Shell>} />
-          <Route path="/garcom/novo" element={<Shell permission={["service.view", "orders.create"]}><OrderCreatePage operational /></Shell>} />
-          <Route path="/whatsapp" element={<Shell permission="whatsapp.view"><WhatsAppPage /></Shell>} />
-          <Route path="/meu-perfil" element={<Shell><MyProfilePage /></Shell>} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+        <HandoffEntryGate>
+          <Toaster position="top-right" richColors />
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/primeiro-acesso" element={<FirstAccessPage />} />
+            <Route path="/mudar-senha" element={<ForcedPwGuard />} />
+            <Route path="/" element={<Shell permission="dashboard.view"><DashboardPage /></Shell>} />
+            <Route path="/:restaurantSlug" element={<Shell permission="dashboard.view"><DashboardPage /></Shell>} />
+            <Route path="/pedidos/novo" element={<Shell permission="orders.create"><OrderCreatePage /></Shell>} />
+            <Route path="/pedidos/:id" element={<Shell permission="orders.view"><ErrorBoundary><OrderDetailPage /></ErrorBoundary></Shell>} />
+            <Route path="/pedidos/:id/editar" element={<Shell permission="orders.edit"><OrderEditPage /></Shell>} />
+            <Route path="/historico" element={<Shell permission="history.view"><OrdersHistoryPage /></Shell>} />
+            <Route path="/produtos" element={<Shell permission="products.view"><ProductsPage /></Shell>} />
+            <Route path="/clientes" element={<Shell permission="customers.view"><CustomersPage /></Shell>} />
+            <Route path="/usuarios" element={<Shell permission="users.view"><UsersPage /></Shell>} />
+            <Route path="/cozinha" element={<Shell permission="kds.view"><KitchenPage /></Shell>} />
+            <Route path="/garcom" element={<Shell permission="service.view"><WaiterPage /></Shell>} />
+            <Route path="/garcom/novo" element={<Shell permission={["service.view", "orders.create"]}><OrderCreatePage operational /></Shell>} />
+            <Route path="/whatsapp" element={<Shell permission="whatsapp.view"><WhatsAppPage /></Shell>} />
+            <Route path="/meu-perfil" element={<Shell><MyProfilePage /></Shell>} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </HandoffEntryGate>
       </BrowserRouter>
     </AuthProvider>
   );

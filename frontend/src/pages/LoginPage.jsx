@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { UtensilsCrossed, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,11 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/AuthContext";
 import { useDocumentTitle } from "@/hooks/use-document-title";
-import { CursorDrivenParticleTypography } from "@/components/ui/cursor-driven-particle-typography";
+import { ParticleEntryTransition, useParticleEntryTransition } from "@/components/auth/ParticleEntryTransition";
 import { toast } from "sonner";
-
-const MIN_TRANSITION_MS = 600;
-const EXPLOSION_FALLBACK_MS = 800;
 
 export default function LoginPage() {
   useDocumentTitle("Login");
@@ -20,33 +17,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(handoffError || "");
-  const [animationState, setAnimationState] = useState("idle");
-  const acceptedAtRef = useRef(0);
   const loginAttemptRef = useRef(false);
-  const navigationCompletedRef = useRef(false);
 
   const finishNavigation = useCallback(() => {
-    if (navigationCompletedRef.current) return;
-    navigationCompletedRef.current = true;
     toast.success("Bem-vindo ao DACOT");
     nav("/", { replace: true });
   }, [nav]);
-
-  useEffect(() => {
-    if (animationState !== "loading" || !user || typeof user !== "object") return undefined;
-    const elapsed = Date.now() - acceptedAtRef.current;
-    const timer = window.setTimeout(
-      () => setAnimationState("explode"),
-      Math.max(0, MIN_TRANSITION_MS - elapsed),
-    );
-    return () => window.clearTimeout(timer);
-  }, [animationState, user]);
-
-  useEffect(() => {
-    if (animationState !== "explode") return undefined;
-    const fallback = window.setTimeout(finishNavigation, EXPLOSION_FALLBACK_MS);
-    return () => window.clearTimeout(fallback);
-  }, [animationState, finishNavigation]);
+  const { animationState, startTransition, finishTransition } = useParticleEntryTransition(finishNavigation);
 
   if (user && typeof user === "object" && !loginAttemptRef.current) {
     return <Navigate to="/" replace />;
@@ -61,9 +38,8 @@ export default function LoginPage() {
     const res = await login(email, password);
     setLoading(false);
     if (res.ok && res.user && typeof res.user === "object") {
-      acceptedAtRef.current = Date.now();
       document.activeElement?.blur();
-      setAnimationState("loading");
+      startTransition();
     } else {
       loginAttemptRef.current = false;
       setError(res.error || "Não foi possível carregar os dados do restaurante. Tente novamente.");
@@ -71,22 +47,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen min-h-[100dvh] items-center justify-center overflow-hidden bg-background px-5 py-8 sm:px-8">
-      <CursorDrivenParticleTypography
-        text="DACOT"
-        state={animationState}
-        onExplosionComplete={finishNavigation}
-        className={`absolute inset-0 z-0 transition-opacity duration-300 ${
-          animationState === "idle" ? "opacity-35 dark:opacity-45" : "opacity-90 dark:opacity-100"
-        }`}
-      />
-      <div
-        className={`pointer-events-none absolute inset-0 z-[1] bg-background transition-opacity duration-300 ${
-          animationState === "idle" ? "opacity-25 dark:opacity-15" : "opacity-5"
-        }`}
-        aria-hidden="true"
-      />
-
+    <ParticleEntryTransition animationState={animationState} onExplosionComplete={finishTransition}>
       <main
         aria-hidden={animationState !== "idle"}
         className={`relative z-10 w-full max-w-md rounded-xl border border-border/80 bg-card/95 p-6 shadow-2xl shadow-black/15 backdrop-blur-sm transition-all duration-300 sm:p-8 dark:shadow-black/40 ${
@@ -154,6 +115,6 @@ export default function LoginPage() {
           </form>
         </div>
       </main>
-    </div>
+    </ParticleEntryTransition>
   );
 }

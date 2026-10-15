@@ -48,6 +48,7 @@ async function consumeHandoffFromUrl() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [handoffError, setHandoffError] = useState("");
+  const [handoffEntryPending, setHandoffEntryPending] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -65,6 +66,7 @@ export function AuthProvider({ children }) {
       const result = await consumeHandoffFromUrl();
       if (result && result.ok) {
         setUser(result.user);
+        setHandoffEntryPending(true);
         return;
       }
       if (result && result.ok === false) {
@@ -91,6 +93,8 @@ export function AuthProvider({ children }) {
     setToken(null); setUser(false);
   };
 
-  return <AuthCtx.Provider value={{ user, login, logout, refresh, handoffError }}>{children}</AuthCtx.Provider>;
+  const completeHandoffEntry = useCallback(() => setHandoffEntryPending(false), []);
+
+  return <AuthCtx.Provider value={{ user, login, logout, refresh, handoffError, handoffEntryPending, completeHandoffEntry }}>{children}</AuthCtx.Provider>;
 }
 export const useAuth = () => useContext(AuthCtx);
