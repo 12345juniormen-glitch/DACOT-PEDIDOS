@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { UtensilsCrossed, ShieldAlert } from "lucide-react";
 import { api, formatApiError } from "@/lib/api";
@@ -47,9 +47,9 @@ export default function ChangePasswordPage({ forced = false }) {
         <h1 className="text-2xl font-display font-bold text-foreground">Alterar senha</h1>
         <p className="text-sm text-muted-foreground mt-1">Usuário: {user?.email}</p>
         <form onSubmit={submit} className="mt-6 space-y-4">
-          <div><Label>Senha atual</Label><Input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required data-testid="current-password-input" /></div>
-          <div><Label>Nova senha</Label><Input type="password" value={next} onChange={(e) => setNext(e.target.value)} required data-testid="new-password-input" /></div>
-          <div><Label>Confirmar nova senha</Label><Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required data-testid="confirm-password-input" /></div>
+          <div><Label>Senha atual</Label><PasswordInput value={current} onChange={(e) => setCurrent(e.target.value)} required data-testid="current-password-input" /></div>
+          <div><Label>Nova senha</Label><PasswordInput value={next} onChange={(e) => setNext(e.target.value)} required data-testid="new-password-input" /></div>
+          <div><Label>Confirmar nova senha</Label><PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)} required data-testid="confirm-password-input" /></div>
           <Button type="submit" disabled={saving} className="w-full" data-testid="submit-change-password">{saving ? "Alterando..." : "Alterar senha"}</Button>
           {!forced && <button type="button" onClick={() => nav(-1)} className="w-full text-xs text-muted-foreground hover:text-foreground">Voltar</button>}
           {forced && <button type="button" onClick={logout} className="w-full text-xs text-muted-foreground hover:text-foreground">Sair</button>}

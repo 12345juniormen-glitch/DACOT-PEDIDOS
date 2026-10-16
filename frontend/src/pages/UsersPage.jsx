@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus, Pencil, KeyRound, ShieldCheck, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -226,7 +227,7 @@ export default function UsersPage() {
           <div className="space-y-3">
             <div><Label>Nome</Label><Input value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} data-testid="user-name-input" /></div>
             <div><Label>Email</Label><Input type="email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} data-testid="user-email-input" /></div>
-            <div><Label>Senha</Label><Input type="text" value={createForm.temp_password} onChange={(e) => setCreateForm({ ...createForm, temp_password: e.target.value })} placeholder="Mínimo 6 caracteres" data-testid="user-password-input" /></div>
+            <div><Label>Senha</Label><PasswordInput value={createForm.temp_password} onChange={(e) => setCreateForm({ ...createForm, temp_password: e.target.value })} placeholder="Mínimo 6 caracteres" data-testid="user-password-input" autoComplete="new-password" /></div>
             <div><Label>Cargo</Label>
               <Select value={roleValue(createForm)} onValueChange={(v) => applyRolePreset(createForm, setCreateForm, v, "create")}>
                 <SelectTrigger className="mt-1.5" data-testid="user-role-select"><SelectValue /></SelectTrigger>
@@ -278,7 +279,7 @@ export default function UsersPage() {
           <DialogHeader><DialogTitle>Redefinir senha</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">Defina uma nova senha para <b>{target?.name}</b>.</p>
-            <div><Label>Nova senha</Label><Input type="text" value={tempPw} onChange={(e) => setTempPw(e.target.value)} placeholder="Mínimo 6 caracteres" data-testid="reset-password-input" /></div>
+            <div><Label>Nova senha</Label><PasswordInput value={tempPw} onChange={(e) => setTempPw(e.target.value)} placeholder="Mínimo 6 caracteres" data-testid="reset-password-input" autoComplete="new-password" /></div>
             <label className="flex items-center gap-2 text-sm">
               <Checkbox checked={requirePasswordChange}
                 data-testid="require-password-change-reset"

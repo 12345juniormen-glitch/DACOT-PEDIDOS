@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2, UtensilsCrossed } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { api, formatApiError } from "@/lib/api";
 import { useDocumentTitle } from "@/hooks/use-document-title";
@@ -51,12 +51,12 @@ export default function FirstAccessPage() {
           <form onSubmit={submit} className="mt-8 space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="password">Nova senha</Label>
-              <Input id="password" type="password" autoComplete="new-password" value={password}
+              <PasswordInput id="password" autoComplete="new-password" value={password}
                 onChange={(event) => setPassword(event.target.value)} required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="confirm">Confirmar senha</Label>
-              <Input id="confirm" type="password" autoComplete="new-password" value={confirm}
+              <PasswordInput id="confirm" autoComplete="new-password" value={confirm}
                 onChange={(event) => setConfirm(event.target.value)} required />
             </div>
             {error && <div className="text-sm text-destructive bg-rose-50 border border-rose-200 dark:bg-rose-950 dark:border-rose-900 rounded-md px-3 py-2">{error}</div>}
