@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { UtensilsCrossed, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,13 +12,17 @@ import { toast } from "sonner";
 
 export default function LoginPage() {
   useDocumentTitle("Login");
-  const { user, login, handoffError } = useAuth();
+  const { user, login, handoffError, accessEndedMessage } = useAuth();
   const nav = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(handoffError || "");
+  const [error, setError] = useState(handoffError || accessEndedMessage || "");
   const loginAttemptRef = useRef(false);
+
+  useEffect(() => {
+    setError(handoffError || accessEndedMessage || "");
+  }, [accessEndedMessage, handoffError]);
 
   const finishNavigation = useCallback(() => {
     toast.success("Bem-vindo ao DACOT");

@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { api, getToken, setToken, formatApiError } from "../lib/api";
 
 const AuthCtx = createContext(null);
+const ACCESS_REVALIDATION_INTERVAL_MS = 60_000;
+const ACCESS_ENDED_MESSAGE = "Seu acesso ao DACOT foi encerrado.";
 
 /**
  * If the URL contains ?handoff=<jwt>, exchange it for a local session token,
@@ -53,17 +55,21 @@ export function AuthProvider({ children }) {
   const [initialHandoff] = useState(readHandoffFromUrl);
   const [user, setUser] = useState(null);
   const [handoffError, setHandoffError] = useState("");
+  const [accessEndedMessage, setAccessEndedMessage] = useState("");
   const [bootstrapState, setBootstrapState] = useState(
     initialHandoff ? "validating_handoff" : "restoring_session",
   );
   const bootstrapStartedRef = useRef(false);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async ({ showAccessEndedMessage = false } = {}) => {
     try {
       const { data } = await api.get("/auth/me");
       setUser(data);
       return data;
-    } catch {
+    } catch (error) {
+      if (showAccessEndedMessage && [401, 403].includes(error.response?.status)) {
+        setAccessEndedMessage(ACCESS_ENDED_MESSAGE);
+      }
       setToken(null); setUser(false);
       return null;
     }
@@ -96,7 +102,26 @@ export function AuthProvider({ children }) {
     })();
   }, [initialHandoff, refresh]);
 
+  useEffect(() => {
+    if (!user || user === false) return undefined;
+
+    const revalidateAccess = () => refresh({ showAccessEndedMessage: true });
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") revalidateAccess();
+    };
+
+    const intervalId = window.setInterval(revalidateAccess, ACCESS_REVALIDATION_INTERVAL_MS);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("online", revalidateAccess);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("online", revalidateAccess);
+    };
+  }, [refresh, user]);
+
   const login = async (email, password) => {
+    setAccessEndedMessage("");
     try {
       const { data } = await api.post("/auth/login", { email, password });
       setToken(data.token); setUser(data.user);
@@ -113,6 +138,6 @@ export function AuthProvider({ children }) {
     setBootstrapState((current) => current === "handoff_confirmed" ? "ready" : current);
   }, []);
 
-  return <AuthCtx.Provider value={{ user, login, logout, refresh, handoffError, bootstrapState, completeHandoffEntry }}>{children}</AuthCtx.Provider>;
+  return <AuthCtx.Provider value={{ user, login, logout, refresh, handoffError, accessEndedMessage, bootstrapState, completeHandoffEntry }}>{children}</AuthCtx.Provider>;
 }
 export const useAuth = () => useContext(AuthCtx);
