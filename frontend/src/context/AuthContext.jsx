@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { api, getToken, setToken, formatApiError } from "@/lib/api";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { api, getToken, setToken, formatApiError } from "../lib/api";
 
 const AuthCtx = createContext(null);
 
@@ -8,13 +8,17 @@ const AuthCtx = createContext(null);
  * remove the query param from the URL, and never persist the handoff token.
  * Returns true if a handoff was processed (regardless of success/failure).
  */
-async function consumeHandoffFromUrl() {
+function readHandoffFromUrl() {
   const url = new URL(window.location.href);
   const handoff = url.searchParams.get("handoff");
-  if (!handoff) return false;
+  if (!handoff) return null;
 
   const urlSlug = url.pathname.replace(/^\/+|\/+$/g, "");
-  const routerSlug = urlSlug || null;
+  return { handoff, routerSlug: urlSlug || null };
+}
+
+async function consumeHandoffFromUrl({ handoff, routerSlug }) {
+  const url = new URL(window.location.href);
 
   // Strip handoff immediately from the URL; the token is never kept in history or storage.
   url.searchParams.delete("handoff");
@@ -46,9 +50,13 @@ async function consumeHandoffFromUrl() {
 }
 
 export function AuthProvider({ children }) {
+  const [initialHandoff] = useState(readHandoffFromUrl);
   const [user, setUser] = useState(null);
   const [handoffError, setHandoffError] = useState("");
-  const [handoffEntryPending, setHandoffEntryPending] = useState(false);
+  const [bootstrapState, setBootstrapState] = useState(
+    initialHandoff ? "validating_handoff" : "restoring_session",
+  );
+  const bootstrapStartedRef = useRef(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -62,23 +70,31 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    if (bootstrapStartedRef.current) return;
+    bootstrapStartedRef.current = true;
     (async () => {
-      const result = await consumeHandoffFromUrl();
-      if (result && result.ok) {
-        setUser(result.user);
-        setHandoffEntryPending(true);
-        return;
-      }
-      if (result && result.ok === false) {
+      if (initialHandoff) {
+        const result = await consumeHandoffFromUrl(initialHandoff);
+        if (result.ok) {
+          setUser(result.user);
+          setBootstrapState("handoff_confirmed");
+          return;
+        }
         setHandoffError(result.error || "Falha no handoff");
         setToken(null);
         setUser(false);
+        setBootstrapState("handoff_error");
         return;
       }
-      if (!getToken()) { setUser(false); return; }
-      refresh();
+      if (!getToken()) {
+        setUser(false);
+        setBootstrapState("ready");
+        return;
+      }
+      await refresh();
+      setBootstrapState("ready");
     })();
-  }, [refresh]);
+  }, [initialHandoff, refresh]);
 
   const login = async (email, password) => {
     try {
@@ -93,8 +109,10 @@ export function AuthProvider({ children }) {
     setToken(null); setUser(false);
   };
 
-  const completeHandoffEntry = useCallback(() => setHandoffEntryPending(false), []);
+  const completeHandoffEntry = useCallback(() => {
+    setBootstrapState((current) => current === "handoff_confirmed" ? "ready" : current);
+  }, []);
 
-  return <AuthCtx.Provider value={{ user, login, logout, refresh, handoffError, handoffEntryPending, completeHandoffEntry }}>{children}</AuthCtx.Provider>;
+  return <AuthCtx.Provider value={{ user, login, logout, refresh, handoffError, bootstrapState, completeHandoffEntry }}>{children}</AuthCtx.Provider>;
 }
 export const useAuth = () => useContext(AuthCtx);

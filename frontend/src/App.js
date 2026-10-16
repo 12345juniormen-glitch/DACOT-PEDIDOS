@@ -44,24 +44,28 @@ function PermissionGuard({ permission, children }) {
 }
 
 function ForcedPwGuard() {
-  const { user } = useAuth();
-  if (user === null) return <div className="flex h-screen items-center justify-center text-sm text-muted-foreground">Carregando…</div>;
+  const { user, bootstrapState } = useAuth();
+  if (user === null) {
+    if (bootstrapState === "handoff_confirmed") return null;
+    return <div className="flex h-screen items-center justify-center text-sm text-muted-foreground">Carregando…</div>;
+  }
   if (!user) return <Navigate to="/login" replace />;
   return <ChangePasswordPage forced={!!user.must_change_password} />;
 }
 
 function HandoffEntryGate({ children }) {
-  const { handoffEntryPending, completeHandoffEntry } = useAuth();
+  const { bootstrapState, completeHandoffEntry } = useAuth();
   const { animationState, startTransition, finishTransition } = useParticleEntryTransition(completeHandoffEntry);
+  const handoffConfirmed = bootstrapState === "handoff_confirmed";
 
   useEffect(() => {
-    if (handoffEntryPending && animationState === "idle") startTransition();
-  }, [animationState, handoffEntryPending, startTransition]);
+    if (handoffConfirmed && animationState === "idle") startTransition();
+  }, [animationState, handoffConfirmed, startTransition]);
 
   return (
     <>
       {children}
-      {handoffEntryPending && (
+      {handoffConfirmed && (
         <ParticleEntryTransition
           animationState={animationState === "idle" ? "loading" : animationState}
           onExplosionComplete={finishTransition}
