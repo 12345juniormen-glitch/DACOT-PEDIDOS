@@ -18,8 +18,10 @@ function Harness() {
       <span data-testid="bootstrap">{auth.bootstrapState}</span>
       <span data-testid="user">{auth.user ? auth.user.id : String(auth.user)}</span>
       <span data-testid="error">{auth.handoffError}</span>
+      <span data-testid="access-ended">{auth.accessEndedMessage}</span>
       <button type="button" onClick={auth.completeHandoffEntry}>concluir entrada</button>
       <button type="button" onClick={() => auth.login("admin@dacot.local", "senha")}>login direto</button>
+      <button type="button" onClick={() => auth.refresh({ showAccessEndedMessage: true })}>revalidar acesso</button>
     </div>
   );
 }
@@ -120,5 +122,22 @@ describe("bootstrap de autenticação e handoff", () => {
     act(() => container.querySelectorAll("button")[0].click());
 
     expect(container.querySelector("[data-testid='bootstrap']").textContent).toBe("ready");
+  });
+
+  test("revogação retornada pelo Hub encerra a sessão local com mensagem", async () => {
+    getToken.mockReturnValue("sessao-existente");
+    api.get
+      .mockResolvedValueOnce({ data: { id: "existing-user" } })
+      .mockRejectedValueOnce({ response: { status: 403 } });
+
+    await act(async () => root.render(<AuthProvider><Harness /></AuthProvider>));
+    await flushAsync();
+    await act(async () => container.querySelectorAll("button")[2].click());
+    await flushAsync();
+
+    expect(setToken).toHaveBeenLastCalledWith(null);
+    expect(container.querySelector("[data-testid='user']").textContent).toBe("false");
+    expect(container.querySelector("[data-testid='access-ended']").textContent)
+      .toBe("Seu acesso ao DACOT foi encerrado.");
   });
 });

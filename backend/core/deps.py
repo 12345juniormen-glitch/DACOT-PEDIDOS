@@ -49,7 +49,11 @@ async def get_current_user(request: Request) -> dict:
 
     if user.get("provisioned_by") == "hub_handoff" or user.get("hub_user_id"):
         await check_hub_access(user["restaurant_id"], user.get("hub_user_id", ""),
-                               user["role"], payload.get("hub_access"))
+                               user["role"], payload.get("hub_access"),
+                               # The client periodically calls /auth/me to detect
+                               # revocation while idle. That route bypasses only
+                               # the bounded positive lease, never Hub authority.
+                               fresh=request.url.path == "/api/auth/me")
 
     user["permissions"] = effective_permissions(user)
 
