@@ -38,7 +38,7 @@ class Particle {
 export function CursorDrivenParticleTypography({
   text,
   className = "",
-  color = "#f97316",
+  color,
   fontFamily = "Inter, sans-serif",
   state = "idle",
   onExplosionComplete,
@@ -72,10 +72,16 @@ export function CursorDrivenParticleTypography({
     let visible = !document.hidden;
     let explosionStartedAt = null;
     let explosionCompleted = false;
+    const resolveColor = () => {
+      if (color) return color;
+      const primary = window.getComputedStyle(document.documentElement).getPropertyValue("--primary").trim();
+      return primary ? `hsl(${primary})` : "#B9572A";
+    };
+    let particleColor = resolveColor();
 
     const draw = () => {
       context.clearRect(0, 0, width, height);
-      context.fillStyle = color;
+      context.fillStyle = particleColor;
       for (const particle of particles) {
         context.beginPath();
         context.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
@@ -157,7 +163,7 @@ export function CursorDrivenParticleTypography({
       }
 
       context.clearRect(0, 0, width, height);
-      context.fillStyle = color;
+      context.fillStyle = particleColor;
 
       if (exploding) {
         const duration = reducedMotion ? 220 : 560;
@@ -225,6 +231,10 @@ export function CursorDrivenParticleTypography({
       visible = !document.hidden;
       restartAnimation();
     };
+    const themeObserver = new MutationObserver(() => {
+      particleColor = resolveColor();
+      if (reducedMotion) draw();
+    });
 
     buildParticles();
     restartAnimation();
@@ -234,6 +244,7 @@ export function CursorDrivenParticleTypography({
     window.addEventListener("resize", handleResize);
     document.addEventListener("visibilitychange", handleVisibility);
     reducedMotionQuery.addEventListener?.("change", handleMotionChange);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
 
     return () => {
       window.cancelAnimationFrame(frameId);
@@ -244,6 +255,7 @@ export function CursorDrivenParticleTypography({
       window.removeEventListener("resize", handleResize);
       document.removeEventListener("visibilitychange", handleVisibility);
       reducedMotionQuery.removeEventListener?.("change", handleMotionChange);
+      themeObserver.disconnect();
     };
   }, [color, fontFamily, state, text]);
 

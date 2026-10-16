@@ -76,7 +76,7 @@ export function CustomerImportDialog({ open, onOpenChange, onImported }) {
             Envie um CSV exportado da agenda do restaurante. O DACOT não acessa nem faz login no WhatsApp; contatos repetidos por telefone não serão criados.
           </DialogDescription>
         </DialogHeader>
-        <div className="rounded-md border border-dashed p-4">
+        <div className="rounded-none border border-dashed p-4">
           <label className="flex cursor-pointer flex-col items-center gap-2 text-center text-sm">
             <Upload className="h-5 w-5 text-muted-foreground" />
             <span>{file?.name || "Selecionar arquivo CSV"}</span>

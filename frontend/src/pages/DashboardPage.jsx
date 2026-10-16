@@ -113,13 +113,13 @@ export default function DashboardPage() {
       {user?.role === "kitchen" && (
         <Link
           to="/cozinha"
-          className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 hover:bg-orange-100 dark:border-orange-900 dark:bg-orange-950 dark:hover:bg-orange-900 transition-colors"
+          className="mb-6 flex items-center justify-between gap-3 rounded-none border border-primary/30 bg-primary/10 px-4 py-3 hover:bg-primary/15 transition-colors"
           data-testid="kitchen-shortcut-banner"
         >
-          <span className="flex items-center gap-2.5 text-sm font-medium text-orange-900 dark:text-orange-200">
+          <span className="flex items-center gap-2.5 text-sm font-medium text-primary">
             <ChefHat className="w-4 h-4" /> Sua tela de trabalho é a Cozinha — pedidos por ticket, botões grandes.
           </span>
-          <ArrowRight className="w-4 h-4 text-orange-700 dark:text-orange-400 shrink-0" />
+          <ArrowRight className="w-4 h-4 text-primary shrink-0" />
         </Link>
       )}
 
@@ -132,7 +132,7 @@ export default function DashboardPage() {
 
       {attentionCount > 0 && (
         <div
-          className="mb-6 flex cursor-default items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 shadow-none dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+          className="mb-6 flex cursor-default items-center gap-2 rounded-none border border-warning/30 bg-warning/10 px-4 py-2.5 text-sm text-warning shadow-none"
           data-testid="ops-now-attention"
         >
           <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -151,14 +151,14 @@ export default function DashboardPage() {
             {COLUMNS.map((col) => {
               const Icon = STATUS_ICON[col.key];
               const statusColor = col.key === "new"
-                ? "bg-blue-500"
+                ? "bg-info"
                 : col.key === "in_preparation"
-                  ? "bg-orange-500"
-                  : "bg-emerald-500";
+                  ? "bg-warning"
+                  : "bg-success";
               return (
                 <div
                   key={col.key}
-                  className="flex min-h-[190px] flex-col overflow-hidden rounded-md border border-border bg-muted/35"
+                  className="flex min-h-[190px] flex-col overflow-hidden rounded-none border border-border bg-muted/35"
                   data-testid={`column-${col.key}`}
                 >
                   <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -179,7 +179,7 @@ export default function DashboardPage() {
                     {byStatus[col.key].map((o) => (
                       <article
                         key={o.id}
-                        className="cursor-default rounded border border-border bg-card p-3 shadow-sm"
+                        className="cursor-default rounded-none border border-border bg-card p-3 shadow-sm"
                         data-testid={`order-card-${o.order_number}`}
                       >
                         <div className="mb-2 flex items-center justify-between gap-3">
@@ -208,7 +208,7 @@ export default function DashboardPage() {
                         </ul>
 
                         {o.notes && (
-                          <p className="mt-2 line-clamp-2 border-l-2 border-amber-400 pl-2 text-xs text-muted-foreground">
+                          <p className="mt-2 line-clamp-2 border-l-2 border-warning pl-2 text-xs text-muted-foreground">
                             {o.notes}
                           </p>
                         )}
@@ -239,11 +239,11 @@ export default function DashboardPage() {
       {SHOW_PERFORMANCE_SECTION && canSeeFinance && (
         <section>
           <SectionTitle>Vendas & desempenho hoje</SectionTitle>
-          <div className="bg-card border rounded-lg p-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="bg-card border rounded-none p-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
             <button
               type="button"
               onClick={() => setMetricDialog("revenue")}
-              className="-m-1.5 cursor-pointer rounded-md p-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
+              className="-m-1.5 cursor-pointer rounded-sm p-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
               data-testid="metric-revenue"
             >
               <div className="flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
@@ -256,7 +256,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => setMetricDialog("createdToday")}
-              className="-m-1.5 cursor-pointer rounded-md p-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
+              className="-m-1.5 cursor-pointer rounded-sm p-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
               data-testid="metric-orders-today"
             >
               <div className="flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
@@ -269,7 +269,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => setMetricDialog("deliveredToday")}
-              className="-m-1.5 cursor-pointer rounded-md p-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
+              className="-m-1.5 cursor-pointer rounded-sm p-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
               data-testid="metric-delivered-today"
             >
               <div className="flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
@@ -282,7 +282,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => setMetricDialog("avgTime")}
-              className="-m-1.5 cursor-pointer rounded-md p-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
+              className="-m-1.5 cursor-pointer rounded-sm p-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
               data-testid="metric-avg-total-time-today"
             >
               <div className="flex items-center gap-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
@@ -307,7 +307,7 @@ function SectionTitle({ children }) {
 
 function Indicator({ label, value, highlight = false, testid }) {
   return (
-    <div className={`cursor-default bg-card border rounded-lg p-4 shadow-none ${highlight ? "border-primary/40 bg-accent/30" : ""}`} data-testid={testid}>
+    <div className={`cursor-default bg-card border rounded-none p-4 shadow-none ${highlight ? "border-primary/40 bg-primary/10" : ""}`} data-testid={testid}>
       <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">{label}</div>
       <div className={`mt-1 font-display text-2xl font-bold ${highlight ? "text-primary" : "text-foreground"}`}>{value}</div>
     </div>

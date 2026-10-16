@@ -96,7 +96,7 @@ export function CustomerDetailDialog({ open, onOpenChange, customer }) {
                       key={o.id}
                       to={`/pedidos/${o.id}`}
                       onClick={() => onOpenChange(false)}
-                      className="block border rounded-md p-3 hover:border-primary/40 hover:bg-accent/30 transition-colors"
+                      className="block border rounded-none p-3 hover:border-primary/40 hover:bg-secondary transition-colors"
                       data-testid={`customer-order-${o.order_number}`}
                     >
                       <div className="flex items-center justify-between gap-2 mb-1.5">

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, ClipboardList, History, Package, Users, LogOut, UtensilsCrossed, ShieldCheck, UserCircle, ChefHat, HandPlatter, Menu, Search, MessageCircle, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { LayoutDashboard, ClipboardList, History, Package, Users, LogOut, Ticket, ShieldCheck, UserCircle, ChefHat, HandPlatter, Menu, Search, MessageCircle, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -55,7 +55,7 @@ export function AppShell({ children }) {
         data-testid="app-sidebar"
         aria-hidden={isOperationalScreen && operationalSidebarCollapsed}
         inert={isOperationalScreen && operationalSidebarCollapsed ? true : undefined}
-        className={`hidden shrink-0 overflow-hidden bg-card transition-[width,border-color] duration-200 ease-out md:flex ${
+        className={`hidden shrink-0 overflow-hidden bg-sidebar transition-[width,border-color] duration-200 ease-out md:flex ${
           isOperationalScreen && operationalSidebarCollapsed
             ? "md:w-0 border-r-0"
             : "md:w-64 border-r"
@@ -63,7 +63,7 @@ export function AppShell({ children }) {
       >
         <div className="flex min-h-screen w-64 shrink-0 flex-col">
           <div className="h-16 flex items-center gap-2 px-4 border-b">
-            <div className="w-9 h-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center"><UtensilsCrossed className="w-5 h-5" /></div>
+            <div className="w-9 h-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center"><Ticket className="w-5 h-5" /></div>
             <div className="min-w-0 flex-1"><div className="font-display font-extrabold text-lg leading-none tracking-tight">DACOT</div><div className="text-[11px] text-muted-foreground mt-0.5">Módulo de Pedidos</div></div>
             {isOperationalScreen && (
               <button
@@ -72,7 +72,7 @@ export function AppShell({ children }) {
                 data-testid="collapse-operational-sidebar"
                 aria-label="Recolher menu lateral"
                 title="Recolher menu lateral"
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <PanelLeftClose className="h-4 w-4" />
               </button>
@@ -82,7 +82,7 @@ export function AppShell({ children }) {
             <button
               onClick={() => setSearchOpen(true)}
               data-testid="global-search-trigger"
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/50 text-sm text-muted-foreground hover:bg-muted transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-sm border bg-muted/50 text-sm text-muted-foreground hover:bg-muted transition-colors"
             >
               <Search className="w-4 h-4 shrink-0" />
               <span className="truncate">Buscar pedidos, clientes ou produtos...</span>
@@ -91,14 +91,14 @@ export function AppShell({ children }) {
           <nav className="flex-1 p-3 space-y-1">
             {items.map(({ to, label, icon: Icon, testid, end }) => (
               <NavLink key={to} to={to} end={end} data-testid={testid}
-                className={({ isActive }) => `flex items-center gap-3 pl-2.5 pr-3 py-2 rounded-md text-sm font-medium border-l-2 transition-colors ${isActive ? "border-primary bg-accent/60 text-foreground" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+                className={({ isActive }) => `flex items-center gap-3 pl-2.5 pr-3 py-2 rounded-none text-sm font-medium border-l-2 transition-colors ${isActive ? "border-primary bg-primary/10 dark:bg-sidebar-selected text-foreground" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
                 <Icon className="w-4 h-4" />{label}
               </NavLink>
             ))}
           </nav>
           <div className="border-t p-3">
-            <NavLink to="/meu-perfil" className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-muted" data-testid="nav-profile">
-              <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-accent-foreground text-xs font-semibold shrink-0">{(user?.name || "?").slice(0, 1).toUpperCase()}</div>
+            <NavLink to="/meu-perfil" className="flex items-center gap-3 px-2 py-2 rounded-none hover:bg-muted" data-testid="nav-profile">
+              <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-primary text-xs font-semibold shrink-0">{(user?.name || "?").slice(0, 1).toUpperCase()}</div>
               <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{user?.name}</div><div className="text-xs text-muted-foreground truncate">{user?.custom_role_name || ROLE_LABEL[user?.role]}</div></div>
               <UserCircle className="w-4 h-4 text-muted-foreground" />
             </NavLink>
@@ -117,28 +117,28 @@ export function AppShell({ children }) {
           data-testid="expand-operational-sidebar"
           aria-label="Abrir menu lateral"
           title="Abrir menu lateral"
-          className="fixed left-3 top-3 z-30 hidden h-9 w-9 items-center justify-center rounded-md border bg-card text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
+          className="fixed left-3 top-3 z-30 hidden h-9 w-9 items-center justify-center rounded-sm border bg-card text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
         >
           <PanelLeftOpen className="h-4 w-4" />
         </button>
       )}
 
-      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-card border-b z-40 flex items-center px-4 gap-2">
+      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-sidebar border-b z-40 flex items-center px-4 gap-2">
         <button
           onClick={() => setMobileNavOpen(true)}
           data-testid="mobile-nav-toggle"
           aria-label="Abrir menu"
-          className="p-1.5 -ml-1.5 rounded-md text-muted-foreground hover:bg-muted"
+          className="p-1.5 -ml-1.5 rounded-sm text-muted-foreground hover:bg-muted"
         >
           <Menu className="w-5 h-5" />
         </button>
-        <UtensilsCrossed className="w-5 h-5 text-primary" /><span className="font-display font-bold">DACOT</span>
+        <Ticket className="w-5 h-5 text-primary" /><span className="font-display font-bold">DACOT</span>
         <div className="ml-auto flex items-center gap-1">
           {canSearch && <button
             onClick={() => setSearchOpen(true)}
             data-testid="mobile-global-search-trigger"
             aria-label="Buscar"
-            className="p-1.5 rounded-md text-muted-foreground hover:bg-muted"
+            className="p-1.5 rounded-sm text-muted-foreground hover:bg-muted"
           >
             <Search className="w-5 h-5" />
           </button>}
@@ -148,23 +148,23 @@ export function AppShell({ children }) {
       </div>
 
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-        <SheetContent side="left" className="w-72 flex flex-col p-0" data-testid="mobile-nav-sheet">
+        <SheetContent side="left" className="w-72 flex flex-col p-0 bg-sidebar" data-testid="mobile-nav-sheet">
           <SheetTitle className="sr-only">Menu de navegação</SheetTitle>
           <div className="h-16 flex items-center gap-2 px-6 border-b">
-            <div className="w-9 h-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center"><UtensilsCrossed className="w-5 h-5" /></div>
+            <div className="w-9 h-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center"><Ticket className="w-5 h-5" /></div>
             <div><div className="font-display font-extrabold text-lg leading-none tracking-tight">DACOT</div><div className="text-[11px] text-muted-foreground mt-0.5">Módulo de Pedidos</div></div>
           </div>
           <nav className="flex-1 p-3 space-y-1">
             {items.map(({ to, label, icon: Icon, testid, end }) => (
               <NavLink key={to} to={to} end={end} data-testid={`mobile-${testid}`} onClick={() => setMobileNavOpen(false)}
-                className={({ isActive }) => `flex items-center gap-3 pl-2.5 pr-3 py-2.5 rounded-md text-sm font-medium border-l-2 transition-colors ${isActive ? "border-primary bg-accent/60 text-foreground" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+                className={({ isActive }) => `flex items-center gap-3 pl-2.5 pr-3 py-2.5 rounded-none text-sm font-medium border-l-2 transition-colors ${isActive ? "border-primary bg-primary/10 dark:bg-sidebar-selected text-foreground" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
                 <Icon className="w-4 h-4" />{label}
               </NavLink>
             ))}
           </nav>
           <div className="border-t p-3">
-            <NavLink to="/meu-perfil" onClick={() => setMobileNavOpen(false)} className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-muted" data-testid="mobile-nav-profile">
-              <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-accent-foreground text-xs font-semibold shrink-0">{(user?.name || "?").slice(0, 1).toUpperCase()}</div>
+            <NavLink to="/meu-perfil" onClick={() => setMobileNavOpen(false)} className="flex items-center gap-3 px-2 py-2 rounded-none hover:bg-muted" data-testid="mobile-nav-profile">
+              <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-primary text-xs font-semibold shrink-0">{(user?.name || "?").slice(0, 1).toUpperCase()}</div>
               <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{user?.name}</div><div className="text-xs text-muted-foreground truncate">{user?.custom_role_name || ROLE_LABEL[user?.role]}</div></div>
               <UserCircle className="w-4 h-4 text-muted-foreground" />
             </NavLink>

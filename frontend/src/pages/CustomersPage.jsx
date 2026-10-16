@@ -67,7 +67,7 @@ export default function CustomersPage() {
         </div> : null}
       />
 
-      <div className="bg-card border rounded-lg overflow-hidden">
+      <div className="bg-card border rounded-none overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-sm">
           <thead className="bg-muted">

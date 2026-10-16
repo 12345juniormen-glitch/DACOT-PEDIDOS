@@ -31,8 +31,8 @@ function formatElapsedClock(elapsedMs) {
 // 0–9min: normal · 10–19min: destaque leve · 20+min: destaque de atenção.
 function elapsedTierClass(elapsedMs) {
   const totalMin = Math.floor(elapsedMs / 60000);
-  if (totalMin >= 20) return "text-rose-600 dark:text-rose-400 font-bold";
-  if (totalMin >= 10) return "text-amber-600 dark:text-amber-400 font-semibold";
+  if (totalMin >= 20) return "text-destructive font-bold";
+  if (totalMin >= 10) return "text-warning font-semibold";
   return "text-muted-foreground font-medium";
 }
 
@@ -175,11 +175,11 @@ export default function KitchenPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Coluna: Novos */}
-        <section data-testid="column-kitchen-new" className="bg-card border-2 border-blue-200 dark:border-blue-900 rounded-lg overflow-hidden">
-          <div className="px-5 py-4 border-b-2 border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950">
+        <section data-testid="column-kitchen-new" className="bg-card border-2 border-info/30 rounded-none overflow-hidden">
+          <div className="px-5 py-4 border-b-2 border-info/30 bg-info/10">
             <div className="flex items-center justify-between">
-              <h2 className="font-display font-bold text-lg text-blue-900 dark:text-blue-200">Novos</h2>
-              <span className="text-2xl font-display font-bold text-blue-700 dark:text-blue-400" data-testid="count-new">{grouped.new.length}</span>
+              <h2 className="font-display font-bold text-lg text-info">Novos</h2>
+              <span className="text-2xl font-display font-bold text-info" data-testid="count-new">{grouped.new.length}</span>
             </div>
           </div>
           <div className="p-4 space-y-4 min-h-[300px] max-h-[calc(100vh-260px)] overflow-y-auto">
@@ -204,11 +204,11 @@ export default function KitchenPage() {
         </section>
 
         {/* Coluna: Em preparo */}
-        <section data-testid="column-kitchen-in-prep" className="bg-card border-2 border-orange-300 dark:border-orange-800 rounded-lg overflow-hidden">
-          <div className="px-5 py-4 border-b-2 border-orange-300 dark:border-orange-800 bg-orange-50 dark:bg-orange-950">
+        <section data-testid="column-kitchen-in-prep" className="bg-card border-2 border-warning/30 rounded-none overflow-hidden">
+          <div className="px-5 py-4 border-b-2 border-warning/30 bg-warning/10">
             <div className="flex items-center justify-between">
-              <h2 className="font-display font-bold text-lg text-orange-900 dark:text-orange-200">Em preparo</h2>
-              <span className="text-2xl font-display font-bold text-orange-700 dark:text-orange-400" data-testid="count-in-prep">{grouped.in_preparation.length}</span>
+              <h2 className="font-display font-bold text-lg text-warning">Em preparo</h2>
+              <span className="text-2xl font-display font-bold text-warning" data-testid="count-in-prep">{grouped.in_preparation.length}</span>
             </div>
           </div>
           <div className="p-4 space-y-4 min-h-[300px] max-h-[calc(100vh-260px)] overflow-y-auto">
@@ -230,7 +230,7 @@ export default function KitchenPage() {
                   </Button>
                   <Button
                     size="lg"
-                    className="flex-[2] text-base h-12 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    className="flex-[2] text-base h-12 bg-success hover:bg-success/90 text-success-foreground"
                     onClick={() => changeStatus(o, "ready", "pronto para retirada")}
                     disabled={busy === o.id}
                     data-testid={`mark-ready-${o.order_number}`}
@@ -244,11 +244,11 @@ export default function KitchenPage() {
         </section>
 
         {/* Coluna: Prontos */}
-        <section data-testid="column-kitchen-ready" className="bg-card border-2 border-emerald-300 dark:border-emerald-800 rounded-lg overflow-hidden">
-          <div className="px-5 py-4 border-b-2 border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950">
+        <section data-testid="column-kitchen-ready" className="bg-card border-2 border-success/30 rounded-none overflow-hidden">
+          <div className="px-5 py-4 border-b-2 border-success/30 bg-success/10">
             <div className="flex items-center justify-between">
-              <h2 className="font-display font-bold text-lg text-emerald-900 dark:text-emerald-200">Prontos</h2>
-              <span className="text-2xl font-display font-bold text-emerald-700 dark:text-emerald-400" data-testid="count-ready">{grouped.ready.length}</span>
+              <h2 className="font-display font-bold text-lg text-success">Prontos</h2>
+              <span className="text-2xl font-display font-bold text-success" data-testid="count-ready">{grouped.ready.length}</span>
             </div>
           </div>
           <div className="p-4 space-y-4 min-h-[300px] max-h-[calc(100vh-260px)] overflow-y-auto">
@@ -278,17 +278,17 @@ export default function KitchenPage() {
 
 function KitchenCard({ order, now, accent = "blue", children }) {
   const accentBorder = accent === "orange"
-    ? "border-orange-200 dark:border-orange-900"
+    ? "border-warning/30"
     : accent === "emerald"
-      ? "border-emerald-200 dark:border-emerald-900"
-      : "border-slate-200 dark:border-slate-700";
+      ? "border-success/30"
+      : "border-info/30";
   const stageTimestamp = order[STAGE_TIMESTAMP_FIELD[order.status]] || order.created_at;
   const elapsedMs = now - new Date(stageTimestamp).getTime();
   const prepEstimate = formatOrderPrepEstimate(order.items);
   return (
     <article
       data-testid={`kitchen-order-${order.order_number}`}
-      className={`border rounded-lg overflow-hidden bg-card shadow-sm ${accentBorder}`}
+      className={`border rounded-none overflow-hidden bg-card shadow-sm ${accentBorder}`}
     >
       <header className="px-4 py-3 flex items-center justify-between bg-muted border-b">
         <div className="font-display font-bold text-2xl text-foreground">#{order.order_number}</div>
@@ -306,13 +306,13 @@ function KitchenCard({ order, now, accent = "blue", children }) {
         <ul className="space-y-2" data-testid={`items-${order.order_number}`}>
           {order.items.map((i, idx) => (
             <li key={idx} className="flex items-start gap-3">
-              <span className="inline-flex items-center justify-center min-w-[2.5rem] h-9 px-2 rounded bg-slate-900 text-white font-display font-bold text-base">
+              <span className="inline-flex items-center justify-center min-w-[2.5rem] h-9 px-2 rounded-none bg-foreground text-background font-display font-bold text-base">
                 {i.quantity}×
               </span>
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-base text-foreground leading-tight">{i.product_name}</div>
                 {i.notes && (
-                  <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 dark:text-amber-300 dark:bg-amber-950 dark:border-amber-900 rounded px-2 py-1 mt-1 inline-block">
+                  <div className="text-sm text-warning bg-warning/10 border border-warning/30 rounded-none px-2 py-1 mt-1 inline-block">
                     ⚑ {i.notes}
                   </div>
                 )}
@@ -321,7 +321,7 @@ function KitchenCard({ order, now, accent = "blue", children }) {
           ))}
         </ul>
         {order.notes && (
-          <div className="mt-3 text-sm bg-amber-50 border border-amber-200 rounded px-3 py-2 text-amber-900 dark:bg-amber-950 dark:border-amber-900 dark:text-amber-200">
+          <div className="mt-3 text-sm bg-warning/10 border border-warning/30 rounded-none px-3 py-2 text-warning">
             <span className="font-semibold">Obs. do pedido: </span>{order.notes}
           </div>
         )}

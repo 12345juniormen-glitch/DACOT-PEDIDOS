@@ -167,7 +167,7 @@ export default function WhatsAppPage() {
 
   return <div className="p-4 sm:p-6 lg:p-8 max-w-[1500px] mx-auto">
     <PageHeader title="WhatsApp" subtitle="Atendimento de pedidos" />
-    <section className="rounded-lg border bg-card p-4 mb-3 flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+    <section className="rounded-none border bg-card p-4 mb-3 flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
       <div className="min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <h2 className="font-semibold">Conexão do restaurante</h2>
@@ -187,27 +187,27 @@ export default function WhatsAppPage() {
       </div>}
     </section>
     {canConfigure && connection.state === "waiting_qr" && connection.qr_data_url &&
-      <section className="rounded-lg border bg-card p-4 mb-3 text-center">
-        <img src={connection.qr_data_url} alt="QR Code para conectar o WhatsApp" className="w-64 h-64 max-w-full mx-auto rounded-md bg-white p-2" />
+      <section className="rounded-none border bg-card p-4 mb-3 text-center">
+        <img src={connection.qr_data_url} alt="QR Code para conectar o WhatsApp" className="w-64 h-64 max-w-full mx-auto rounded-none bg-white p-2" />
         <p className="text-xs text-muted-foreground mt-2">O código é temporário e será renovado automaticamente.</p>
       </section>}
-    <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_240px] gap-3">
-      <section className="rounded-lg border bg-card p-3 max-h-[70vh] overflow-y-auto">
+    <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_240px] overflow-hidden rounded-none border bg-card">
+      <section className="p-3 max-h-[70vh] overflow-y-auto border-b lg:border-b-0 lg:border-r">
         <h2 className="font-semibold mb-2">Conversas</h2>
         {conversations.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma conversa recebida.</p>}
         {conversations.map((item) => <button key={item.id} onClick={() => { setSelected(item); setPage(1); }}
-          className={`w-full text-left rounded-md p-3 mb-1 hover:bg-muted ${selected?.id === item.id ? "bg-muted" : ""}`}>
+          className={`w-full text-left rounded-none p-3 mb-1 hover:bg-muted ${selected?.id === item.id ? "bg-muted" : ""}`}>
           <span className="font-medium block truncate">{item.profile_name || item.phone}</span>
           <span className="text-xs text-muted-foreground">{item.phone}</span>
           {item.unread > 0 && <span className="ml-2 text-xs text-primary font-semibold">{item.unread} nova{item.unread !== 1 ? "s" : ""}</span>}
         </button>)}
       </section>
-      <section className="rounded-lg border bg-card p-3 sm:p-4 min-h-[350px] flex flex-col min-w-0">
+      <section className="p-3 sm:p-4 min-h-[350px] flex flex-col min-w-0 border-b lg:border-b-0 lg:border-r">
         <h2 className="font-semibold mb-2">Mensagens</h2>
         {!selected ? <p className="text-sm text-muted-foreground">Selecione uma conversa.</p> : <>
           {pages > 1 && <div className="flex gap-2 items-center text-xs mb-2"><Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>Mais antigas</Button><span>Página {page} de {pages}</span><Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Mais recentes</Button></div>}
           <div className="flex-1 space-y-2 overflow-y-auto max-h-[55vh]">
-            {messages.map((message) => <div key={message.id} className={`rounded-md p-2 text-sm max-w-[90%] break-words ${message.direction === "outbound" ? "ml-auto bg-primary/10" : "bg-muted"}`}>
+            {messages.map((message) => <div key={message.id} className={`rounded-none p-2 text-sm max-w-[90%] break-words ${message.direction === "outbound" ? "ml-auto bg-primary/10" : "bg-muted"}`}>
               <div>{message.type === "text" ? message.text : "Mensagem não suportada nesta versão"}</div>
               <div className="text-[11px] text-muted-foreground mt-1">{formatDateTime(message.created_at)} · {message.status}</div>
             </div>)}
@@ -215,7 +215,7 @@ export default function WhatsAppPage() {
           {canOperate && <div className="flex gap-2 mt-3"><Input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} placeholder={connection.connected ? "Responder…" : "Conecte o WhatsApp para responder"} disabled={!connection.connected || busy} /><Button disabled={!connection.connected || busy || !draft.trim()} onClick={send}>Enviar</Button></div>}
         </>}
       </section>
-      <section className="rounded-lg border bg-card p-3 sm:p-4 h-fit">
+      <section className="p-3 sm:p-4 h-fit">
         <h2 className="font-semibold mb-2">Cliente</h2>
         {selected ? <><p className="text-sm break-words">{selected.profile_name || selected.phone}<br /><span className="text-muted-foreground">{selected.phone}</span></p>
           {canOperate && <label className="flex items-start gap-2 text-xs mt-4 text-muted-foreground"><input type="checkbox" className="mt-0.5" checked={!!selected.order_updates_opt_in} onChange={(e) => setConsent(e.target.checked)} /><span>Cliente autorizou receber atualizações do pedido por WhatsApp</span></label>}
@@ -224,7 +224,7 @@ export default function WhatsAppPage() {
         </> : <p className="text-sm text-muted-foreground">Sem conversa selecionada.</p>}
       </section>
     </div>
-    {canConfigure && autoMessages && <Accordion type="single" collapsible className="mt-3 rounded-lg border bg-card px-4">
+    {canConfigure && autoMessages && <Accordion type="single" collapsible className="mt-3 rounded-none border bg-card px-4">
       <AccordionItem value="auto-messages" className="border-b-0">
         <AccordionTrigger className="py-4 hover:no-underline">
           <div className="flex items-start gap-3 min-w-0 pr-3">
@@ -252,7 +252,7 @@ export default function WhatsAppPage() {
             </Button>
           </div>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-            {Object.entries(AUTO_MESSAGE_LABELS).map(([status, label]) => <div key={status} className="rounded-md border p-3">
+            {Object.entries(AUTO_MESSAGE_LABELS).map(([status, label]) => <div key={status} className="border-t p-3">
               <div className="flex items-center justify-between gap-3 mb-2">
                 <label htmlFor={`auto-message-${status}`} className="font-medium text-sm">{label}</label>
                 <Switch id={`auto-message-${status}`} checked={autoMessages[status].enabled}

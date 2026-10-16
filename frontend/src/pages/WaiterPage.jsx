@@ -71,7 +71,7 @@ export default function WaiterPage() {
     <div className="max-w-3xl mx-auto px-3 py-4 sm:px-6 sm:py-6 pb-24">
       <header className="flex items-center justify-between gap-3 mb-4">
         <h1 className="text-2xl font-display font-bold tracking-tight">Garçom</h1>
-        <button onClick={() => load()} disabled={loading} aria-label="Atualizar pedidos" className="p-3 rounded-md border text-muted-foreground hover:bg-muted">
+        <button onClick={() => load()} disabled={loading} aria-label="Atualizar pedidos" className="p-3 rounded-sm border text-muted-foreground hover:bg-muted">
           <RefreshCw className={`w-5 h-5 ${loading ? "animate-spin" : ""}`} />
         </button>
       </header>
@@ -113,20 +113,20 @@ export default function WaiterPage() {
 function OrderSection({ title, orders, empty, ready = false, now, canView, canChangeStatus, canCancel, busy, onOpen, onDeliver, onCancel }) {
   return <section className="mb-7">
     <div className="flex items-center justify-between mb-2 px-1">
-      <h2 className={`text-sm font-bold uppercase tracking-wide ${ready && orders.length ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}`}>{title}</h2>
+      <h2 className={`text-sm font-bold uppercase tracking-wide ${ready && orders.length ? "text-success" : "text-muted-foreground"}`}>{title}</h2>
       <span className="text-sm font-semibold tabular-nums">{orders.length}</span>
     </div>
-    <div className={`divide-y rounded-lg border overflow-hidden ${ready && orders.length ? "border-emerald-500 dark:border-emerald-700" : "border-border"}`}>
+    <div className={`divide-y rounded-none border overflow-hidden ${ready && orders.length ? "border-success" : "border-border"}`}>
       {orders.length === 0 && <p className="px-4 py-6 text-sm text-center text-muted-foreground">{empty}</p>}
       {orders.map((order) => {
         const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
         const prepEstimate = formatOrderPrepEstimate(order.items);
-        return <article key={order.id} className={ready ? "bg-emerald-50 dark:bg-emerald-950/50" : "bg-card"}>
+        return <article key={order.id} className={ready ? "bg-success/10" : "bg-card"}>
           <button type="button" disabled={!canView} onClick={() => canView && onOpen(order)} className="w-full min-h-24 px-4 py-3 flex items-center gap-3 text-left disabled:cursor-default">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="font-display text-xl font-bold">#{order.order_number}</span>
-                <span className={`text-sm font-semibold ${ready ? "text-emerald-700 dark:text-emerald-300" : "text-foreground"}`}>{STATUS_LABEL[order.status]}</span>
+                <span className={`text-sm font-semibold ${ready ? "text-success" : "text-foreground"}`}>{STATUS_LABEL[order.status]}</span>
               </div>
               <div className="font-medium truncate mt-1">{order.customer_name || "Sem cliente"}</div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground mt-1">
@@ -145,7 +145,7 @@ function OrderSection({ title, orders, empty, ready = false, now, canView, canCh
                 <AlertDialogFooter><AlertDialogCancel>Manter pedido</AlertDialogCancel><AlertDialogAction onClick={() => onCancel(order)}>Cancelar pedido</AlertDialogAction></AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>}
-            {ready && canChangeStatus && <Button onClick={() => onDeliver(order)} disabled={busy === order.id} className="h-11 flex-[2] bg-emerald-600 hover:bg-emerald-700 text-white"><Check className="w-5 h-5 mr-1.5" /> Marcar entregue</Button>}
+            {ready && canChangeStatus && <Button onClick={() => onDeliver(order)} disabled={busy === order.id} className="h-11 flex-[2] bg-success hover:bg-success/90 text-success-foreground"><Check className="w-5 h-5 mr-1.5" /> Marcar entregue</Button>}
           </div>}
         </article>;
       })}

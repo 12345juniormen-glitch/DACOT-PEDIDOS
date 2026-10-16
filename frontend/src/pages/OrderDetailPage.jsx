@@ -166,7 +166,7 @@ export default function OrderDetailPage() {
           {cancellable && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" className="text-destructive border-destructive/30 hover:bg-rose-50 dark:hover:bg-rose-950" data-testid="cancel-order-button">
+                <Button variant="outline" size="sm" className="text-destructive border-destructive/30 hover:bg-destructive/10" data-testid="cancel-order-button">
                   <XCircle className="w-4 h-4 mr-1.5" /> Cancelar
                 </Button>
               </AlertDialogTrigger>
@@ -262,7 +262,7 @@ export default function OrderDetailPage() {
       </Card>
 
       {/* Items */}
-      <div className="bg-card border rounded-lg overflow-hidden">
+      <div className="bg-card border rounded-none overflow-hidden">
         <div className="px-4 py-3 border-b text-xs font-semibold uppercase tracking-wider text-muted-foreground">Itens</div>
         <div className="overflow-x-auto">
         <table className="w-full min-w-[480px] text-sm">
@@ -307,7 +307,7 @@ export default function OrderDetailPage() {
                   <span>− {brl(order.discount_amount)}</span>
                 </div>
               </div>
-              <div className="flex items-center justify-between rounded-md bg-accent/50 border border-primary/20 px-3 py-2.5">
+              <div className="flex items-center justify-between rounded-none bg-secondary border border-primary/20 px-3 py-2.5">
                 <span className="text-sm font-semibold text-foreground">Total</span>
                 <span className="font-display text-xl font-bold text-primary" data-testid="order-total">{brl(order.total)}</span>
               </div>

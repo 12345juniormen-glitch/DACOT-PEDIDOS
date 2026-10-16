@@ -180,7 +180,7 @@ export default function UsersPage() {
         action={canManage ? <Button onClick={openCreateDialog} data-testid="new-user-button"><Plus className="w-4 h-4 mr-1.5" /> Novo Usuário</Button> : null}
       />
 
-      <div className="bg-card border rounded-lg overflow-hidden">
+      <div className="bg-card border rounded-none overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-muted">
@@ -205,7 +205,7 @@ export default function UsersPage() {
             {users.map((u) => (
               <tr key={u.id} className="border-t" data-testid={`user-row-${u.id}`}>
                 <td className="px-4 py-3 font-medium">
-                  <span className="flex items-center gap-2">{u.name}{u.must_change_password && <span title="Senha temporária" className="text-amber-600"><ShieldCheck className="w-3.5 h-3.5" /></span>}</span>
+                  <span className="flex items-center gap-2">{u.name}{u.must_change_password && <span title="Senha temporária" className="text-warning"><ShieldCheck className="w-3.5 h-3.5" /></span>}</span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
                 <td className="px-4 py-3 text-foreground">{customRoles.find((role) => role.id === u.custom_role_id)?.name || ROLE_LABEL[u.role]}</td>
@@ -297,8 +297,8 @@ export default function UsersPage() {
       <Dialog open={openManageRoles} onOpenChange={setOpenManageRoles}>
         <DialogContent>
           <DialogHeader><DialogTitle>Cargos personalizados</DialogTitle></DialogHeader>
-          <div className="space-y-2">
-            {customRoles.map((role) => <div key={role.id} className="flex items-center gap-2 rounded-md border p-3">
+          <div className="divide-y border-y">
+            {customRoles.map((role) => <div key={role.id} className="flex items-center gap-2 p-3">
               <span className="flex-1 font-medium text-sm">{role.name}</span>
               <button type="button" onClick={() => editCustomRole(role)} className="p-1.5 rounded hover:bg-muted text-muted-foreground" title="Editar cargo"><Pencil className="w-4 h-4" /></button>
               <button type="button" onClick={() => deleteCustomRole(role)} className="p-1.5 rounded hover:bg-muted text-destructive" title="Excluir cargo"><Trash2 className="w-4 h-4" /></button>
@@ -342,7 +342,7 @@ function PermissionsEditor({ groups, permissions, onChange }) {
   return <div className="space-y-2 pt-2 border-t">
     <Label>Permissões</Label>
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
-      {groups.map((group) => <div key={group.key} className="rounded-md border p-3">
+      {groups.map((group) => <div key={group.key} className="border-l-2 py-1 pl-3">
         <div className="text-sm font-semibold mb-2">{group.label}</div>
         <div className="space-y-2">
           {group.permissions.map((permission) => <label key={permission.key} className="flex items-center gap-2 text-sm">

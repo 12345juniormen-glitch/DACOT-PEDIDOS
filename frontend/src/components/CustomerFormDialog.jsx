@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -21,6 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { HoldToConfirm } from "@/components/ui/hold-to-confirm";
 import { api, formatApiError } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -35,14 +35,12 @@ export function CustomerFormDialog({ open, onOpenChange, editing = null, onSaved
   const [form, setForm] = useState(empty);
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setForm(editing ? { name: editing.name, phone: editing.phone || "", notes: editing.notes || "" } : empty);
     setDeleteOpen(false);
-    setDeleteConfirmation("");
   }, [open, editing]);
 
   const submit = async () => {
@@ -63,7 +61,7 @@ export function CustomerFormDialog({ open, onOpenChange, editing = null, onSaved
   };
 
   const permanentlyDelete = async () => {
-    if (!editing || deleteConfirmation.trim() !== editing.name) return;
+    if (!editing) return;
     setDeleting(true);
     try {
       await api.delete(`/customers/${editing.id}/permanent`);
@@ -102,7 +100,7 @@ export function CustomerFormDialog({ open, onOpenChange, editing = null, onSaved
               <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} data-testid="customer-notes-input" />
             </div>
             {editing && (
-              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4">
+              <div className="rounded-none border border-destructive/30 bg-destructive/5 p-4">
                 <div className="font-semibold text-destructive">Zona de risco</div>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Exclui o cadastro e o remove das conversas ativas. Pedidos e mensagens antigas permanecem preservados.
@@ -111,10 +109,7 @@ export function CustomerFormDialog({ open, onOpenChange, editing = null, onSaved
                   type="button"
                   variant="destructive"
                   className="mt-3 w-full sm:w-auto"
-                  onClick={() => {
-                    setDeleteConfirmation("");
-                    setDeleteOpen(true);
-                  }}
+                  onClick={() => setDeleteOpen(true)}
                   data-testid="permanent-delete-customer-button"
                 >
                   <Trash2 className="mr-2 h-4 w-4" /> Excluir permanentemente
@@ -132,7 +127,6 @@ export function CustomerFormDialog({ open, onOpenChange, editing = null, onSaved
       <AlertDialog open={deleteOpen} onOpenChange={(nextOpen) => {
         if (deleting) return;
         setDeleteOpen(nextOpen);
-        if (!nextOpen) setDeleteConfirmation("");
       }}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -141,32 +135,16 @@ export function CustomerFormDialog({ open, onOpenChange, editing = null, onSaved
               Esta ação remove “{editing?.name}” do cadastro e das conversas ativas. Pedidos e mensagens históricas não serão apagados.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div>
-            <Label htmlFor="customer-delete-confirmation">
-              Digite <span className="font-semibold text-foreground">{editing?.name}</span> para confirmar
-            </Label>
-            <Input
-              id="customer-delete-confirmation"
-              value={deleteConfirmation}
-              onChange={(event) => setDeleteConfirmation(event.target.value)}
-              className="mt-2"
-              autoComplete="off"
-              data-testid="customer-delete-confirmation-input"
-            />
-          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={deleting || deleteConfirmation.trim() !== editing?.name}
-              onClick={(event) => {
-                event.preventDefault();
-                permanentlyDelete();
-              }}
+            <HoldToConfirm
+              disabled={deleting}
+              onConfirm={permanentlyDelete}
+              className="w-full sm:w-auto"
               data-testid="confirm-permanent-delete-customer-button"
             >
-              {deleting ? "Excluindo..." : "Excluir definitivamente"}
-            </AlertDialogAction>
+              <Trash2 className="h-4 w-4" /> Segure para excluir
+            </HoldToConfirm>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

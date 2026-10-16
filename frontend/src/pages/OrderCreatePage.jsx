@@ -159,7 +159,7 @@ export default function OrderCreatePage({ operational = false }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: product picker */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="bg-card border rounded-lg p-4">
+          <div className="bg-card border rounded-none p-4">
             <div className="flex items-center gap-2 mb-3">
               <Search className="w-4 h-4 text-muted-foreground" />
               <Input
@@ -193,7 +193,7 @@ export default function OrderCreatePage({ operational = false }) {
                   key={p.id}
                   onClick={() => addProduct(p)}
                   data-testid={`add-product-${p.id}`}
-                  className={`text-left border rounded-md p-3 hover:border-primary hover:bg-accent/40 transition-colors ${operational ? "min-h-24 active:bg-accent" : ""}`}
+                  className={`text-left border rounded-none p-3 hover:border-primary hover:bg-secondary transition-colors ${operational ? "min-h-24 active:bg-secondary" : ""}`}
                 >
                   <div className="font-medium text-sm text-foreground truncate">{p.name}</div>
                   <div className="text-xs text-muted-foreground truncate">{p.category}</div>
@@ -211,16 +211,16 @@ export default function OrderCreatePage({ operational = false }) {
 
         {/* Right: resumo do pedido — itens (com destaque) primeiro, depois cliente/obs/desconto/total */}
         <aside className="space-y-4" ref={cartRef}>
-          <div className="bg-card border rounded-lg p-4">
+          <div className="bg-card border rounded-none p-4">
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
               Itens do pedido {items.length > 0 && `(${items.length})`}
             </div>
             {items.length === 0 ? (
               <EmptyState title="Nenhum item ainda" description="Toque em um produto ao lado para adicionar ao pedido." compact />
             ) : (
-              <div className="space-y-2" data-testid="cart-items">
+              <div className="divide-y" data-testid="cart-items">
                 {items.map((i) => (
-                  <div key={i.product_id} className="border rounded-md p-2.5">
+                  <div key={i.product_id} className="p-2.5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium truncate">{i.name}</div>
@@ -254,7 +254,7 @@ export default function OrderCreatePage({ operational = false }) {
             )}
           </div>
 
-          {canViewCustomers && <div className="bg-card border rounded-lg p-4">
+          {canViewCustomers && <div className="bg-card border rounded-none p-4">
             <Label>Cliente (opcional)</Label>
             <Select
               value={customerId}
@@ -293,7 +293,7 @@ export default function OrderCreatePage({ operational = false }) {
             }}
           />}
 
-          <div className="bg-card border rounded-lg p-4 space-y-3">
+          <div className="bg-card border rounded-none p-4 space-y-3">
             <div>
               <Label>Observações do pedido</Label>
               <Textarea
@@ -345,7 +345,7 @@ export default function OrderCreatePage({ operational = false }) {
               )}
             </div>
 
-            <div className="flex items-center justify-between rounded-md bg-accent/50 border border-primary/20 px-3 py-2.5">
+            <div className="flex items-center justify-between rounded-none bg-secondary border border-primary/20 px-3 py-2.5">
               <span className="text-sm font-semibold text-foreground">Total</span>
               <span className="font-display text-xl font-bold text-primary" data-testid="total">{brl(total)}</span>
             </div>

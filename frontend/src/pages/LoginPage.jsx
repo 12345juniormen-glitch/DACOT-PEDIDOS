@@ -51,7 +51,7 @@ export default function LoginPage() {
     <ParticleEntryTransition animationState={animationState} onExplosionComplete={finishTransition}>
       <main
         aria-hidden={animationState !== "idle"}
-        className={`relative z-10 w-full max-w-md rounded-xl border border-border/80 bg-card/95 p-6 shadow-2xl shadow-black/15 backdrop-blur-sm transition-all duration-300 sm:p-8 dark:shadow-black/40 ${
+        className={`relative z-10 w-full max-w-md rounded-md border border-border/80 bg-card/95 p-6 shadow-2xl shadow-black/15 backdrop-blur-sm transition-all duration-300 sm:p-8 dark:shadow-black/40 ${
           animationState === "idle"
             ? "scale-100 opacity-100"
             : "pointer-events-none scale-95 opacity-0"
@@ -59,7 +59,7 @@ export default function LoginPage() {
       >
         <div className="w-full">
           <div className="flex items-center gap-2 mb-8">
-            <div className="w-10 h-10 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
+            <div className="w-10 h-10 rounded-md bg-primary text-primary-foreground flex items-center justify-center">
               <UtensilsCrossed className="w-5 h-5" />
             </div>
             <div>
@@ -99,7 +99,7 @@ export default function LoginPage() {
             {error && (
               <div
                 data-testid="login-error"
-                className="text-sm text-destructive bg-rose-50 border border-rose-200 dark:bg-rose-950 dark:border-rose-900 rounded-md px-3 py-2"
+                className="text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded-none px-3 py-2"
               >
                 {error}
               </div>

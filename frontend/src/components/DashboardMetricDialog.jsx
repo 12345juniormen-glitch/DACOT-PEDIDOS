@@ -61,7 +61,7 @@ function computeDurationStats(orders) {
 
 function SummaryStat({ label, value }) {
   return (
-    <div className="bg-muted/50 rounded-md p-2.5">
+    <div className="bg-muted/50 rounded-none p-2.5">
       <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">{label}</div>
       <div className="mt-0.5 font-display font-bold text-foreground">{value}</div>
     </div>
@@ -186,7 +186,7 @@ export function DashboardMetricDialog({ open, onOpenChange, kind }) {
                     key={o.id}
                     to={`/pedidos/${o.id}`}
                     onClick={() => onOpenChange(false)}
-                    className="block border rounded-md p-3 hover:border-primary/40 hover:bg-accent/30 transition-colors"
+                    className="block border rounded-none p-3 hover:border-primary/40 hover:bg-secondary transition-colors"
                     data-testid={`dashboard-metric-order-${o.order_number}`}
                   >
                     <div className="flex items-center justify-between gap-2 mb-1">

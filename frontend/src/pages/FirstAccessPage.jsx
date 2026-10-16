@@ -38,7 +38,7 @@ export default function FirstAccessPage() {
       <div className="flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-sm">
           <div className="flex items-center gap-2 mb-8">
-            <div className="w-10 h-10 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
+            <div className="w-10 h-10 rounded-md bg-primary text-primary-foreground flex items-center justify-center">
               <UtensilsCrossed className="w-5 h-5" />
             </div>
             <div>
@@ -59,7 +59,7 @@ export default function FirstAccessPage() {
               <PasswordInput id="confirm" autoComplete="new-password" value={confirm}
                 onChange={(event) => setConfirm(event.target.value)} required />
             </div>
-            {error && <div className="text-sm text-destructive bg-rose-50 border border-rose-200 dark:bg-rose-950 dark:border-rose-900 rounded-md px-3 py-2">{error}</div>}
+            {error && <div className="text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded-none px-3 py-2">{error}</div>}
             <Button type="submit" disabled={loading || !token} className="w-full">
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Criar senha"}
             </Button>
@@ -67,13 +67,13 @@ export default function FirstAccessPage() {
           </form>
         </div>
       </div>
-      <div className="hidden lg:flex items-center justify-center bg-slate-900 text-white p-12">
+      <div className="hidden lg:flex items-center justify-center bg-secondary text-secondary-foreground p-12">
         <div className="max-w-sm">
           <div className="w-11 h-11 rounded-md bg-primary text-primary-foreground flex items-center justify-center mb-6">
             <UtensilsCrossed className="w-5 h-5" />
           </div>
           <h2 className="font-display text-2xl font-bold leading-snug">Seu restaurante já está conectado ao DACOT Pedidos.</h2>
-          <p className="text-slate-400 mt-3 text-sm leading-relaxed">Defina uma senha pessoal para acessar com segurança.</p>
+          <p className="text-muted-foreground mt-3 text-sm leading-relaxed">Defina uma senha pessoal para acessar com segurança.</p>
         </div>
       </div>
     </div>

@@ -35,11 +35,11 @@ export default function ChangePasswordPage({ forced = false }) {
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2 mb-6">
-          <div className="w-10 h-10 rounded-lg bg-primary text-primary-foreground flex items-center justify-center"><UtensilsCrossed className="w-5 h-5" /></div>
+          <div className="w-10 h-10 rounded-md bg-primary text-primary-foreground flex items-center justify-center"><UtensilsCrossed className="w-5 h-5" /></div>
           <div><div className="font-display font-extrabold text-xl leading-none">DACOT</div><div className="text-[11px] text-muted-foreground mt-1">Alterar senha</div></div>
         </div>
         {forced && (
-          <div className="mb-4 p-3 rounded-md bg-amber-50 border border-amber-200 text-sm text-amber-900 dark:bg-amber-950 dark:border-amber-900 dark:text-amber-200 flex gap-2">
+          <div className="mb-4 p-3 rounded-none bg-warning/10 border border-warning/30 text-sm text-warning flex gap-2">
             <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0" />
             <div>Sua senha é temporária. Defina uma nova senha para continuar usando o DACOT.</div>
           </div>

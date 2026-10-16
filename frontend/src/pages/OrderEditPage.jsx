@@ -124,7 +124,7 @@ export default function OrderEditPage() {
       <PageHeader title={`Editar Pedido #${order.order_number}`} onBack={() => nav(-1)} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-card border rounded-lg p-4">
+        <div className="lg:col-span-2 bg-card border rounded-none p-4">
           <div className="flex items-center gap-2 mb-3">
             <Search className="w-4 h-4 text-muted-foreground" />
             <Input placeholder="Buscar produto..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="border-0 shadow-none focus-visible:ring-0 px-0" />
@@ -136,7 +136,7 @@ export default function OrderEditPage() {
               </div>
             )}
             {filtered.map((p) => (
-              <button key={p.id} onClick={() => addProduct(p)} className="text-left border rounded-md p-3 hover:border-primary hover:bg-accent/40 transition-colors">
+              <button key={p.id} onClick={() => addProduct(p)} className="text-left border rounded-none p-3 hover:border-primary hover:bg-secondary transition-colors">
                 <div className="font-medium text-sm truncate">{p.name}</div>
                 <div className="text-xs text-muted-foreground truncate">{p.category}</div>
                 <div className="text-sm font-semibold text-primary mt-1">{brl(p.price)}</div>
@@ -151,16 +151,16 @@ export default function OrderEditPage() {
         </div>
 
         <aside className="space-y-4">
-          <div className="bg-card border rounded-lg p-4">
+          <div className="bg-card border rounded-none p-4">
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
               Itens do pedido {items.length > 0 && `(${items.length})`}
             </div>
             {items.length === 0 ? (
               <EmptyState title="Nenhum item" description="Adicione ao menos um produto para salvar." compact />
             ) : (
-              <div className="space-y-2">
+              <div className="divide-y">
                 {items.map((i) => (
-                  <div key={i.product_id} className="border rounded-md p-2.5">
+                  <div key={i.product_id} className="p-2.5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium truncate">{i.name}</div>
@@ -179,7 +179,7 @@ export default function OrderEditPage() {
             )}
           </div>
 
-          <div className="bg-card border rounded-lg p-4">
+          <div className="bg-card border rounded-none p-4">
             <Label>Cliente</Label>
             <Select value={customerId} onValueChange={setCustomerId}>
               <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
@@ -190,7 +190,7 @@ export default function OrderEditPage() {
             </Select>
           </div>
 
-          <div className="bg-card border rounded-lg p-4 space-y-3">
+          <div className="bg-card border rounded-none p-4 space-y-3">
             <div>
               <Label>Observações</Label>
               <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-1.5" />
@@ -214,7 +214,7 @@ export default function OrderEditPage() {
               <div className="flex justify-between text-muted-foreground"><span>Desconto</span><span>− {brl(discountAmount)}</span></div>
               {prepEstimate && <div className="flex justify-between text-muted-foreground"><span>Previsão de preparo</span><span className="font-medium text-foreground">{prepEstimate}</span></div>}
             </div>
-            <div className="flex items-center justify-between rounded-md bg-accent/50 border border-primary/20 px-3 py-2.5">
+            <div className="flex items-center justify-between rounded-none bg-secondary border border-primary/20 px-3 py-2.5">
               <span className="text-sm font-semibold text-foreground">Total</span>
               <span className="font-display text-xl font-bold text-primary">{brl(total)}</span>
             </div>

@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -24,6 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { HoldToConfirm } from "@/components/ui/hold-to-confirm";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { ActivePill } from "@/components/StatusBadge";
@@ -153,7 +153,7 @@ export default function ProductsPage() {
         : null}
       />
 
-      <div className="bg-card border rounded-lg overflow-hidden">
+      <div className="bg-card border rounded-none overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-muted">
@@ -250,7 +250,7 @@ export default function ProductsPage() {
               <Switch id="active" checked={form.active} onCheckedChange={(v) => setForm({ ...form, active: v })} data-testid="product-active-switch" />
             </div>
             {editing && canManage && (
-              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4">
+              <div className="rounded-none border border-destructive/30 bg-destructive/5 p-4">
                 <div className="font-semibold text-destructive">Zona de risco</div>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Exclui definitivamente este cadastro do catálogo. Pedidos antigos permanecem preservados.
@@ -284,17 +284,14 @@ export default function ProductsPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            <HoldToConfirm
               disabled={deleting}
-              onClick={(event) => {
-                event.preventDefault();
-                permanentlyDelete();
-              }}
+              onConfirm={permanentlyDelete}
+              className="w-full sm:w-auto"
               data-testid="confirm-permanent-delete-product-button"
             >
-              {deleting ? "Excluindo..." : "Excluir definitivamente"}
-            </AlertDialogAction>
+              <Trash2 className="h-4 w-4" /> Segure para excluir
+            </HoldToConfirm>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
