@@ -5,6 +5,10 @@ const AuthCtx = createContext(null);
 const ACCESS_REVALIDATION_INTERVAL_MS = 60_000;
 const ACCESS_ENDED_MESSAGE = "Seu acesso ao DACOT foi encerrado.";
 
+function redirectedAfterAccessEnded() {
+  try { return sessionStorage.getItem("dacot.access-ended") === "1"; } catch (_) { return false; }
+}
+
 /**
  * If the URL contains ?handoff=<jwt>, exchange it for a local session token,
  * remove the query param from the URL, and never persist the handoff token.
@@ -55,11 +59,17 @@ export function AuthProvider({ children }) {
   const [initialHandoff] = useState(readHandoffFromUrl);
   const [user, setUser] = useState(null);
   const [handoffError, setHandoffError] = useState("");
-  const [accessEndedMessage, setAccessEndedMessage] = useState("");
+  const [accessEndedMessage, setAccessEndedMessage] = useState(
+    () => redirectedAfterAccessEnded() ? ACCESS_ENDED_MESSAGE : "",
+  );
   const [bootstrapState, setBootstrapState] = useState(
     initialHandoff ? "validating_handoff" : "restoring_session",
   );
   const bootstrapStartedRef = useRef(false);
+
+  useEffect(() => {
+    try { sessionStorage.removeItem("dacot.access-ended"); } catch (_) {}
+  }, []);
 
   const refresh = useCallback(async ({ showAccessEndedMessage = false } = {}) => {
     try {

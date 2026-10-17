@@ -33,6 +33,8 @@ api.interceptors.response.use(
       const path = window.location.pathname;
 
       if (path !== "/login") {
+        // Preserve only the reason for the redirect, never the session token.
+        try { sessionStorage.setItem("dacot.access-ended", "1"); } catch (_) {}
         setToken(null);
         window.location.assign("/login");
       }
