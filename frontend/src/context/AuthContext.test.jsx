@@ -40,6 +40,7 @@ describe("bootstrap de autenticação e handoff", () => {
   beforeEach(() => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
     window.history.replaceState({}, "", "/");
+    sessionStorage.removeItem("dacot.access-ended");
     jest.clearAllMocks();
     formatApiError.mockReturnValue("Handoff inválido");
     container = document.createElement("div");
@@ -139,5 +140,17 @@ describe("bootstrap de autenticação e handoff", () => {
     expect(container.querySelector("[data-testid='user']").textContent).toBe("false");
     expect(container.querySelector("[data-testid='access-ended']").textContent)
       .toBe("Seu acesso ao DACOT foi encerrado.");
+  });
+
+  test("mensagem de acesso encerrado sobrevive ao redirecionamento sem guardar credenciais", async () => {
+    sessionStorage.setItem("dacot.access-ended", "1");
+    getToken.mockReturnValue(null);
+
+    await act(async () => root.render(<StrictMode><AuthProvider><Harness /></AuthProvider></StrictMode>));
+    await flushAsync();
+
+    expect(container.querySelector("[data-testid='access-ended']").textContent)
+      .toBe("Seu acesso ao DACOT foi encerrado.");
+    expect(sessionStorage.getItem("dacot.access-ended")).toBeNull();
   });
 });
