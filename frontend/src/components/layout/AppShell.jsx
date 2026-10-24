@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, ClipboardList, History, Package, Users, LogOut, Ticket, ShieldCheck, UserCircle, ChefHat, HandPlatter, Menu, Search, MessageCircle, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { LayoutDashboard, ClipboardList, History, Package, Users, LogOut, ShieldCheck, UserCircle, ChefHat, HandPlatter, Menu, Search, MessageCircle, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -63,7 +63,7 @@ export function AppShell({ children }) {
       >
         <div className="flex min-h-screen w-64 shrink-0 flex-col">
           <div className="h-16 flex items-center gap-2 px-4 border-b">
-            <div className="w-9 h-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center"><Ticket className="w-5 h-5" /></div>
+            <div className="w-9 h-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center"><img src="/dacot-favicon.png?v=dea7533" alt="" className="h-8 w-8 object-contain brightness-0 invert" /></div>
             <div className="min-w-0 flex-1"><div className="font-display font-extrabold text-lg leading-none tracking-tight">DACOT</div><div className="text-[11px] text-muted-foreground mt-0.5">Módulo de Pedidos</div></div>
             {isOperationalScreen && (
               <button
@@ -132,7 +132,7 @@ export function AppShell({ children }) {
         >
           <Menu className="w-5 h-5" />
         </button>
-        <Ticket className="w-5 h-5 text-primary" /><span className="font-display font-bold">DACOT</span>
+        <img src="/dacot-favicon.png?v=dea7533" alt="" className="w-5 h-5 object-contain" /><span className="font-display font-bold">DACOT</span>
         <div className="ml-auto flex items-center gap-1">
           {canSearch && <button
             onClick={() => setSearchOpen(true)}
@@ -151,7 +151,7 @@ export function AppShell({ children }) {
         <SheetContent side="left" className="w-72 flex flex-col p-0 bg-sidebar" data-testid="mobile-nav-sheet">
           <SheetTitle className="sr-only">Menu de navegação</SheetTitle>
           <div className="h-16 flex items-center gap-2 px-6 border-b">
-            <div className="w-9 h-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center"><Ticket className="w-5 h-5" /></div>
+            <div className="w-9 h-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center"><img src="/dacot-favicon.png?v=dea7533" alt="" className="h-8 w-8 object-contain brightness-0 invert" /></div>
             <div><div className="font-display font-extrabold text-lg leading-none tracking-tight">DACOT</div><div className="text-[11px] text-muted-foreground mt-0.5">Módulo de Pedidos</div></div>
           </div>
           <nav className="flex-1 p-3 space-y-1">
