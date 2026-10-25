@@ -125,7 +125,7 @@ export default function DashboardPage() {
 
       {/* Indicadores principais — sempre corretos para qualquer papel, calculados a partir dos pedidos ativos já
           carregados (não repetem a contagem por status, que já aparece nas colunas logo abaixo) */}
-      <div className="grid grid-cols-2 gap-3 mb-6 max-w-md">
+      <div className="mb-6 grid max-w-md grid-cols-2 gap-px overflow-hidden border border-border bg-border">
         <Indicator label="Pedidos ativos" value={activeTotal} testid="metric-active" />
         <Indicator label="Prontos p/ entrega" value={byStatus.ready.length} highlight={byStatus.ready.length > 0} testid="metric-ready" />
       </div>
@@ -179,7 +179,7 @@ export default function DashboardPage() {
                     {byStatus[col.key].map((o) => (
                       <article
                         key={o.id}
-                        className="cursor-default rounded-none border border-border bg-card p-3 shadow-sm"
+                        className="cursor-default rounded-none border border-border bg-card p-3 shadow-none"
                         data-testid={`order-card-${o.order_number}`}
                       >
                         <div className="mb-2 flex items-center justify-between gap-3">
@@ -307,9 +307,9 @@ function SectionTitle({ children }) {
 
 function Indicator({ label, value, highlight = false, testid }) {
   return (
-    <div className={`cursor-default bg-card border rounded-none p-4 shadow-none ${highlight ? "border-primary/40 bg-primary/10" : ""}`} data-testid={testid}>
-      <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">{label}</div>
-      <div className={`mt-1 font-display text-2xl font-bold ${highlight ? "text-primary" : "text-foreground"}`}>{value}</div>
+    <div className="cursor-default bg-card px-4 py-3" data-testid={testid}>
+      <div className="text-[10px] font-medium uppercase tracking-[0.13em] text-muted-foreground">{label}</div>
+      <div className={`mt-1.5 font-mono text-base leading-none tabular-nums ${highlight ? "text-primary" : "text-foreground"}`}>{value}</div>
     </div>
   );
 }

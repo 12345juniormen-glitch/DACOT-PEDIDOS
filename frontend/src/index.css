@@ -2,11 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 body {
     margin: 0;
-    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    font-family: 'Instrument Sans Variable', 'Instrument Sans', system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    font-feature-settings: "ss01" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     background-color: hsl(var(--background));
@@ -14,7 +16,7 @@ body {
 }
 
 h1, h2, h3, h4, .font-display {
-    font-family: 'Manrope', system-ui, sans-serif;
+    font-family: 'Instrument Sans Variable', 'Instrument Sans', system-ui, sans-serif;
     letter-spacing: -0.02em;
 }
 
@@ -28,29 +30,29 @@ h1, h2, h3, h4, .font-display {
         --sidebar-selected: 28 23.1% 12.7%;
         --popover: 45 40% 98%;
         --popover-foreground: 120 4% 14.7%;
-        --primary: 19 63% 44.5%;
-        --primary-hover: 18 65.4% 35.1%;
-        --primary-foreground: 0 0% 100%;
+        --primary: 25.4 50.4% 51.8%;
+        --primary-hover: 27.4 62.7% 60%;
+        --primary-foreground: 30 29% 6%;
         --secondary: 40 17.6% 90%;
         --secondary-foreground: 120 4% 14.7%;
         --muted: 40 17.6% 90%;
         --muted-foreground: 103 3.3% 42.2%;
-        --accent: 19 63% 44.5%;
-        --accent-foreground: 0 0% 100%;
+        --accent: 25.4 50.4% 51.8%;
+        --accent-foreground: 30 29% 6%;
         --success: 155 42.5% 31.4%;
         --success-foreground: 0 0% 100%;
         --warning: 34 73.8% 37.5%;
         --warning-foreground: 0 0% 100%;
-        --info: 201 45.1% 37.8%;
-        --info-foreground: 0 0% 100%;
+        --info: 38.8 8.1% 60.2%;
+        --info-foreground: 45 40% 98%;
         --destructive: 0 51% 48%;
         --destructive-foreground: 0 0% 98%;
         --border: 42 12.1% 79%;
         --input: 42 12.1% 79%;
-        --ring: 19 63% 44.5%;
-        --chart-1: 19 63% 44.5%;
+        --ring: 25.4 50.4% 51.8%;
+        --chart-1: 25.4 50.4% 51.8%;
         --chart-2: 155 42.5% 31.4%;
-        --chart-3: 201 45.1% 37.8%;
+        --chart-3: 38.8 8.1% 60.2%;
         --chart-4: 34 73.8% 37.5%;
         --chart-5: 0 51% 48%;
         --radius-xs: 0.125rem;
@@ -64,39 +66,39 @@ h1, h2, h3, h4, .font-display {
     /* Modo escuro: grafite neutro quase preto; cobre DACOT reservado para
        identidade, ação principal, foco e seleção pontual. */
     .dark {
-        --background: 210 18.2% 4.3%;
-        --foreground: 210 16.7% 95.3%;
-        --card: 214 16.3% 8.4%;
-        --card-foreground: 210 16.7% 95.3%;
-        --sidebar: 210 17.6% 6.7%;
-        --sidebar-selected: 28 23.1% 12.7%;
-        --popover: 214 16.3% 8.4%;
-        --popover-foreground: 210 16.7% 95.3%;
-        --primary: 20 65.4% 53.5%;
-        --primary-hover: 21 75% 59.2%;
-        --primary-foreground: 0 0% 100%;
-        --secondary: 213 16.4% 10.8%;
-        --secondary-foreground: 210 16.7% 95.3%;
-        --muted: 213 16.4% 10.8%;
-        --muted-foreground: 212 10.4% 64.1%;
-        --accent: 20 65.4% 53.5%;
-        --accent-foreground: 0 0% 100%;
-        --success: 153 32.1% 43.3%;
-        --success-foreground: 0 0% 100%;
-        --warning: 36 59.5% 48.4%;
-        --warning-foreground: 0 0% 100%;
-        --info: 201 31.7% 51.2%;
-        --info-foreground: 0 0% 100%;
-        --destructive: 1 62.9% 59.8%;
-        --destructive-foreground: 0 0% 100%;
-        --border: 213 12.4% 17.5%;
-        --input: 213 12.4% 17.5%;
-        --ring: 20 65.4% 53.5%;
-        --chart-1: 20 65.4% 53.5%;
-        --chart-2: 153 32.1% 43.3%;
-        --chart-3: 201 31.7% 51.2%;
-        --chart-4: 36 59.5% 48.4%;
-        --chart-5: 1 62.9% 59.8%;
+        --background: 60 5.3% 3.7%;
+        --foreground: 37 27.9% 90.8%;
+        --card: 60 3.4% 5.9%;
+        --card-foreground: 37 27.9% 90.8%;
+        --sidebar: 60 4.3% 4.5%;
+        --sidebar-selected: 40 10% 7.8%;
+        --popover: 60 3.4% 5.9%;
+        --popover-foreground: 37 27.9% 90.8%;
+        --primary: 25.4 50.4% 51.8%;
+        --primary-hover: 27.4 62.7% 60%;
+        --primary-foreground: 30 29% 6%;
+        --secondary: 40 10% 7.8%;
+        --secondary-foreground: 37 27.9% 90.8%;
+        --muted: 40 10% 7.8%;
+        --muted-foreground: 38.8 8.1% 60.2%;
+        --accent: 25.4 50.4% 51.8%;
+        --accent-foreground: 30 29% 6%;
+        --success: 87.7 14.3% 57.5%;
+        --success-foreground: 30 29% 6%;
+        --warning: 39.4 49.6% 57.3%;
+        --warning-foreground: 30 29% 6%;
+        --info: 38.8 8.1% 60.2%;
+        --info-foreground: 60 3.4% 5.9%;
+        --destructive: 11.3 48.5% 54.9%;
+        --destructive-foreground: 30 29% 6%;
+        --border: 42.9 9.5% 13.5%;
+        --input: 42.9 9.5% 13.5%;
+        --ring: 25.4 50.4% 51.8%;
+        --chart-1: 25.4 50.4% 51.8%;
+        --chart-2: 87.7 14.3% 57.5%;
+        --chart-3: 38.8 8.1% 60.2%;
+        --chart-4: 39.4 49.6% 57.3%;
+        --chart-5: 11.3 48.5% 54.9%;
     }
 }
 
@@ -114,10 +116,7 @@ h1, h2, h3, h4, .font-display {
         @apply bg-background text-foreground;
     }
     button {
-        transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
-    }
-    button:active {
-        transform: scale(0.98);
+        transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
     }
     :focus-visible {
         outline: 2px solid hsl(var(--ring));

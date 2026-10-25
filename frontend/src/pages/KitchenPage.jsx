@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw, ChefHat, Play, Check, Clock, RotateCcw } from "lucide-react";
+import { RefreshCw, Play, Check, Clock, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/PageHeader";
 import { api, formatApiError } from "@/lib/api";
 import { shouldBeepForNewOrders } from "@/lib/kitchenAlerts";
 import { useDocumentTitle } from "@/hooks/use-document-title";
@@ -156,27 +157,17 @@ export default function KitchenPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto">
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-md bg-primary text-primary-foreground flex items-center justify-center">
-            <ChefHat className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight text-foreground">Cozinha</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {grouped.new.length} novo{grouped.new.length !== 1 ? "s" : ""} · {grouped.in_preparation.length} em preparo · {grouped.ready.length} pronto{grouped.ready.length !== 1 ? "s" : ""}
-            </p>
-          </div>
-        </div>
-        <Button variant="outline" size="lg" onClick={load} disabled={loading} data-testid="refresh-kitchen-button">
-          <RefreshCw className={`w-5 h-5 mr-2 ${loading ? "animate-spin" : ""}`} /> Atualizar
-        </Button>
-      </header>
+      <PageHeader
+        title="Cozinha"
+        eyebrow="OPERAÇÃO / KDS"
+        subtitle={`${grouped.new.length} novo${grouped.new.length !== 1 ? "s" : ""} · ${grouped.in_preparation.length} em preparo · ${grouped.ready.length} pronto${grouped.ready.length !== 1 ? "s" : ""}`}
+        action={<Button variant="outline" size="sm" onClick={load} disabled={loading} data-testid="refresh-kitchen-button"><RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? "animate-spin" : ""}`} />Atualizar</Button>}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Coluna: Novos */}
-        <section data-testid="column-kitchen-new" className="bg-card border-2 border-info/30 rounded-none overflow-hidden">
-          <div className="px-5 py-4 border-b-2 border-info/30 bg-info/10">
+        <section data-testid="column-kitchen-new" className="overflow-hidden rounded-none border border-border bg-card">
+          <div className="border-b border-border px-4 py-3">
             <div className="flex items-center justify-between">
               <h2 className="font-display font-bold text-lg text-info">Novos</h2>
               <span className="text-2xl font-display font-bold text-info" data-testid="count-new">{grouped.new.length}</span>
@@ -204,8 +195,8 @@ export default function KitchenPage() {
         </section>
 
         {/* Coluna: Em preparo */}
-        <section data-testid="column-kitchen-in-prep" className="bg-card border-2 border-warning/30 rounded-none overflow-hidden">
-          <div className="px-5 py-4 border-b-2 border-warning/30 bg-warning/10">
+        <section data-testid="column-kitchen-in-prep" className="overflow-hidden rounded-none border border-border bg-card">
+          <div className="border-b border-border px-4 py-3">
             <div className="flex items-center justify-between">
               <h2 className="font-display font-bold text-lg text-warning">Em preparo</h2>
               <span className="text-2xl font-display font-bold text-warning" data-testid="count-in-prep">{grouped.in_preparation.length}</span>
@@ -216,7 +207,7 @@ export default function KitchenPage() {
               <div className="text-center text-base text-muted-foreground py-16">Nenhum pedido em preparo</div>
             )}
             {grouped.in_preparation.map((o) => (
-              <KitchenCard key={o.id} order={o} now={now} accent="orange">
+              <KitchenCard key={o.id} order={o} now={now}>
                 {canChangeStatus && <div className="flex gap-2">
                   <Button
                     variant="outline"
@@ -244,8 +235,8 @@ export default function KitchenPage() {
         </section>
 
         {/* Coluna: Prontos */}
-        <section data-testid="column-kitchen-ready" className="bg-card border-2 border-success/30 rounded-none overflow-hidden">
-          <div className="px-5 py-4 border-b-2 border-success/30 bg-success/10">
+        <section data-testid="column-kitchen-ready" className="overflow-hidden rounded-none border border-border bg-card">
+          <div className="border-b border-border px-4 py-3">
             <div className="flex items-center justify-between">
               <h2 className="font-display font-bold text-lg text-success">Prontos</h2>
               <span className="text-2xl font-display font-bold text-success" data-testid="count-ready">{grouped.ready.length}</span>
@@ -256,7 +247,7 @@ export default function KitchenPage() {
               <div className="text-center text-base text-muted-foreground py-16">Nenhum pedido pronto</div>
             )}
             {grouped.ready.map((o) => (
-              <KitchenCard key={o.id} order={o} now={now} accent="emerald">
+              <KitchenCard key={o.id} order={o} now={now}>
                 {canChangeStatus && <Button
                   variant="outline"
                   size="lg"
@@ -276,19 +267,14 @@ export default function KitchenPage() {
   );
 }
 
-function KitchenCard({ order, now, accent = "blue", children }) {
-  const accentBorder = accent === "orange"
-    ? "border-warning/30"
-    : accent === "emerald"
-      ? "border-success/30"
-      : "border-info/30";
+function KitchenCard({ order, now, children }) {
   const stageTimestamp = order[STAGE_TIMESTAMP_FIELD[order.status]] || order.created_at;
   const elapsedMs = now - new Date(stageTimestamp).getTime();
   const prepEstimate = formatOrderPrepEstimate(order.items);
   return (
     <article
       data-testid={`kitchen-order-${order.order_number}`}
-      className={`border rounded-none overflow-hidden bg-card shadow-sm ${accentBorder}`}
+      className="overflow-hidden rounded-none border border-border bg-card shadow-none"
     >
       <header className="px-4 py-3 flex items-center justify-between bg-muted border-b">
         <div className="font-display font-bold text-2xl text-foreground">#{order.order_number}</div>

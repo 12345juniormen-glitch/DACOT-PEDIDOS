@@ -7,6 +7,11 @@ module.exports = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["Instrument Sans Variable", "Instrument Sans", "system-ui", "sans-serif"],
+        display: ["Instrument Sans Variable", "Instrument Sans", "system-ui", "sans-serif"],
+        mono: ["IBM Plex Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"]
+      },
       borderRadius: {
         xs: 'var(--radius-xs)',
         sm: 'var(--radius-sm)',

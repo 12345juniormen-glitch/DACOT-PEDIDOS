@@ -96,16 +96,16 @@ export function AppShell({ children }) {
         className={`sticky top-0 hidden h-dvh shrink-0 overflow-hidden bg-sidebar transition-[width,border-color] duration-200 ease-out md:flex ${
           isOperationalScreen && operationalSidebarCollapsed
             ? "md:w-0 border-r-0"
-            : "md:w-64 border-r"
+            : "md:w-[240px] border-r"
         }`}
       >
-        <div className="flex h-full min-h-0 w-64 shrink-0 flex-col">
-          <div className="relative shrink-0 border-b px-4 py-4">
+        <div className="flex h-full min-h-0 w-[240px] shrink-0 flex-col">
+          <div className="relative shrink-0 border-b border-border px-5 pb-4 pt-5">
             <div className="flex items-center gap-2.5">
-              <img src="/dacot-favicon.png?v=dea7533" alt="" className="h-8 w-8 shrink-0 object-contain" />
+              <img src="/dacot-favicon.png?v=dea7533" alt="" className="h-7 w-7 shrink-0 object-contain" />
               <div className="min-w-0">
-                <div className="font-display text-lg font-extrabold leading-none tracking-tight">DACOT</div>
-                <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Módulo de Pedidos</div>
+                <div className="font-display text-[15px] font-semibold leading-none tracking-[0.2em]">DACOT</div>
+                <div className="mt-1.5 text-[9.5px] uppercase leading-none tracking-[0.14em] text-muted-foreground">Módulo de Pedidos</div>
               </div>
             </div>
             {isOperationalScreen && (
@@ -121,29 +121,19 @@ export function AppShell({ children }) {
               </button>
             )}
           </div>
-          {restaurantName && <div className="shrink-0 border-b px-5 py-4">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Restaurante</div>
-            <div className="mt-1 truncate text-sm font-medium text-foreground" title={restaurantName}>{restaurantName}</div>
+          {restaurantName && <div className="mx-4 mb-4 shrink-0 border border-border bg-background px-3 py-2.5">
+            <div className="text-[9.5px] uppercase tracking-[0.14em] text-muted-foreground">Restaurante</div>
+            <div className="mt-1 truncate text-[12.5px] font-medium text-foreground" title={restaurantName}>{restaurantName}</div>
           </div>}
-          {canSearch && <div className="px-3 pt-3">
-            <button
-              onClick={() => setSearchOpen(true)}
-              data-testid="global-search-trigger"
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-sm border bg-muted/50 text-sm text-muted-foreground hover:bg-muted transition-colors"
-            >
-              <Search className="w-4 h-4 shrink-0" />
-              <span className="truncate">Buscar pedidos, clientes ou produtos...</span>
-            </button>
-          </div>}
-          <nav aria-label="Navegação principal" className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+          <nav aria-label="Navegação principal" className="min-h-0 flex-1 overflow-y-auto pb-4">
             {visibleNavGroups.map((group) => (
-              <section key={group.label} aria-label={group.label} className="mb-5 last:mb-0">
-                <h2 className="mb-1.5 px-2.5 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground">{group.label}</h2>
-                <div className="space-y-0.5">
+              <section key={group.label} aria-label={group.label} className="mb-4 last:mb-0">
+                <h2 className="mb-2 px-5 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">{group.label}</h2>
+                <div>
                   {group.items.map(({ to, label, icon: Icon, testid, end }) => (
                     <NavLink key={to} to={to} end={end} data-testid={testid}
-                      className={({ isActive }) => `flex min-h-10 items-center gap-3 border-l-2 py-2 pl-2.5 pr-3 text-sm font-medium transition-colors ${isActive ? "border-primary bg-primary/10 dark:bg-sidebar-selected text-foreground" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
-                      <Icon className="h-4 w-4 shrink-0" />{label}
+                      className={({ isActive }) => `flex min-h-8 items-center gap-2.5 border-l-2 px-4 py-2 text-[13px] transition-colors ${isActive ? "border-primary bg-muted/70 text-foreground [&_svg]:text-primary" : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"}`}>
+                      <Icon className="h-[15px] w-[15px] shrink-0" strokeWidth={1.6} />{label}
                     </NavLink>
                   ))}
                 </div>
@@ -151,9 +141,9 @@ export function AppShell({ children }) {
             ))}
           </nav>
           <div className="mt-auto shrink-0 border-t p-3">
-            <NavLink to="/meu-perfil" className="flex min-h-12 items-center gap-3 px-2 py-2 transition-colors hover:bg-muted" data-testid="nav-profile">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">{initials || "?"}</div>
-              <div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{user?.name}</div><div className="truncate text-xs text-muted-foreground">{user?.custom_role_name || ROLE_LABEL[user?.role]}</div></div>
+            <NavLink to="/meu-perfil" className="flex min-h-12 items-center gap-2.5 px-1 py-1.5 transition-colors hover:bg-muted/50" data-testid="nav-profile">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center border border-border bg-muted font-mono text-[10px] text-primary">{initials || "?"}</div>
+              <div className="min-w-0 flex-1"><div className="truncate text-[11.5px] text-foreground">{user?.name}</div><div className="truncate text-[10px] text-muted-foreground">{user?.custom_role_name || ROLE_LABEL[user?.role]}</div></div>
               <UserCircle className="w-4 h-4 text-muted-foreground" />
             </NavLink>
             <div className="mt-2 flex items-center gap-1">
@@ -171,13 +161,13 @@ export function AppShell({ children }) {
           data-testid="expand-operational-sidebar"
           aria-label="Abrir menu lateral"
           title="Abrir menu lateral"
-          className="fixed left-3 top-3 z-30 hidden h-9 w-9 items-center justify-center rounded-sm border bg-card text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
+          className="fixed left-3 top-3 z-30 hidden h-9 w-9 items-center justify-center rounded-sm border border-border bg-card text-muted-foreground shadow-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
         >
           <PanelLeftOpen className="h-4 w-4" />
         </button>
       )}
 
-      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-sidebar border-b z-40 flex items-center px-4 gap-2">
+      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-sidebar border-b border-border z-40 flex items-center px-4 gap-2">
         <button
           onClick={() => setMobileNavOpen(true)}
           data-testid="mobile-nav-toggle"
@@ -202,27 +192,27 @@ export function AppShell({ children }) {
       </div>
 
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-        <SheetContent side="left" className="h-dvh max-h-dvh w-72 max-w-[calc(100vw-2rem)] flex flex-col overflow-hidden p-0 bg-sidebar" data-testid="mobile-nav-sheet">
+        <SheetContent side="left" className="h-dvh max-h-dvh w-[272px] max-w-[calc(100vw-2rem)] flex flex-col overflow-hidden p-0 bg-sidebar" data-testid="mobile-nav-sheet">
           <SheetTitle className="sr-only">Menu de navegação</SheetTitle>
-          <div className="shrink-0 border-b px-5 py-4">
+          <div className="shrink-0 border-b border-border px-5 pb-4 pt-5">
             <div className="flex items-center gap-2.5">
-              <img src="/dacot-favicon.png?v=dea7533" alt="" className="h-8 w-8 shrink-0 object-contain" />
-              <div className="min-w-0"><div className="font-display text-lg font-extrabold leading-none tracking-tight">DACOT</div><div className="mt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Módulo de Pedidos</div></div>
+              <img src="/dacot-favicon.png?v=dea7533" alt="" className="h-7 w-7 shrink-0 object-contain" />
+              <div className="min-w-0"><div className="font-display text-[15px] font-semibold leading-none tracking-[0.2em]">DACOT</div><div className="mt-1.5 text-[9.5px] uppercase leading-none tracking-[0.14em] text-muted-foreground">Módulo de Pedidos</div></div>
             </div>
           </div>
-          {restaurantName && <div className="shrink-0 border-b px-5 py-3.5">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Restaurante</div>
-            <div className="mt-1 truncate text-sm font-medium text-foreground" title={restaurantName}>{restaurantName}</div>
+          {restaurantName && <div className="mx-4 mb-4 shrink-0 border border-border bg-background px-3 py-2.5">
+            <div className="text-[9.5px] uppercase tracking-[0.14em] text-muted-foreground">Restaurante</div>
+            <div className="mt-1 truncate text-[12.5px] font-medium text-foreground" title={restaurantName}>{restaurantName}</div>
           </div>}
-          <nav aria-label="Navegação principal" className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+          <nav aria-label="Navegação principal" className="min-h-0 flex-1 overflow-y-auto pb-4">
             {visibleNavGroups.map((group) => (
-              <section key={group.label} aria-label={group.label} className="mb-5 last:mb-0">
-                <h2 className="mb-1.5 px-2.5 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground">{group.label}</h2>
-                <div className="space-y-0.5">
+              <section key={group.label} aria-label={group.label} className="mb-4 last:mb-0">
+                <h2 className="mb-2 px-5 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">{group.label}</h2>
+                <div>
                   {group.items.map(({ to, label, icon: Icon, testid, end }) => (
                     <NavLink key={to} to={to} end={end} data-testid={`mobile-${testid}`} onClick={() => setMobileNavOpen(false)}
-                      className={({ isActive }) => `flex min-h-11 items-center gap-3 border-l-2 py-2.5 pl-2.5 pr-3 text-sm font-medium transition-colors ${isActive ? "border-primary bg-primary/10 dark:bg-sidebar-selected text-foreground" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
-                      <Icon className="h-4 w-4 shrink-0" />{label}
+                      className={({ isActive }) => `flex min-h-10 items-center gap-2.5 border-l-2 px-4 py-2.5 text-[13px] transition-colors ${isActive ? "border-primary bg-muted/70 text-foreground [&_svg]:text-primary" : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"}`}>
+                      <Icon className="h-[15px] w-[15px] shrink-0" strokeWidth={1.6} />{label}
                     </NavLink>
                   ))}
                 </div>
@@ -230,16 +220,33 @@ export function AppShell({ children }) {
             ))}
           </nav>
           <div className="mt-auto shrink-0 border-t p-3">
-            <NavLink to="/meu-perfil" onClick={() => setMobileNavOpen(false)} className="flex min-h-12 items-center gap-3 px-2 py-2 transition-colors hover:bg-muted" data-testid="mobile-nav-profile">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">{initials || "?"}</div>
-              <div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{user?.name}</div><div className="truncate text-xs text-muted-foreground">{user?.custom_role_name || ROLE_LABEL[user?.role]}</div></div>
+            <NavLink to="/meu-perfil" onClick={() => setMobileNavOpen(false)} className="flex min-h-12 items-center gap-2.5 px-1 py-1.5 transition-colors hover:bg-muted/50" data-testid="mobile-nav-profile">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center border border-border bg-muted font-mono text-[10px] text-primary">{initials || "?"}</div>
+              <div className="min-w-0 flex-1"><div className="truncate text-[11.5px] text-foreground">{user?.name}</div><div className="truncate text-[10px] text-muted-foreground">{user?.custom_role_name || ROLE_LABEL[user?.role]}</div></div>
               <UserCircle className="w-4 h-4 text-muted-foreground" />
             </NavLink>
           </div>
         </SheetContent>
       </Sheet>
 
-      <main className="flex-1 min-w-0 pt-14 md:pt-0">{children}</main>
+      <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
+        <header className="hidden h-12 shrink-0 items-center justify-between border-b border-border bg-background px-6 md:flex xl:px-8">
+          <div className="flex items-center gap-2 text-[11.5px]">
+            <span className="text-muted-foreground">DACOT</span>
+            <span className="h-3 w-px bg-border" aria-hidden="true" />
+            <span className="uppercase tracking-[0.12em] text-foreground">Módulo de Pedidos</span>
+          </div>
+          {canSearch && <button
+            onClick={() => setSearchOpen(true)}
+            data-testid="global-search-trigger"
+            className="inline-flex h-8 max-w-[340px] items-center gap-2 border border-transparent px-2.5 text-[12px] text-muted-foreground transition-colors hover:border-border hover:bg-muted/40 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <Search className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Buscar pedidos, clientes ou produtos...</span>
+          </button>}
+        </header>
+        <main className="min-w-0 flex-1 pt-14 md:pt-0">{children}</main>
+      </div>
 
       <GlobalSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
     </div>

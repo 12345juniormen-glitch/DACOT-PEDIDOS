@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronRight, Clock, Plus, RefreshCw, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/PageHeader";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -69,12 +70,11 @@ export default function WaiterPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-3 py-4 sm:px-6 sm:py-6 pb-24">
-      <header className="flex items-center justify-between gap-3 mb-4">
-        <h1 className="text-2xl font-display font-bold tracking-tight">Garçom</h1>
-        <button onClick={() => load()} disabled={loading} aria-label="Atualizar pedidos" className="p-3 rounded-sm border text-muted-foreground hover:bg-muted">
-          <RefreshCw className={`w-5 h-5 ${loading ? "animate-spin" : ""}`} />
-        </button>
-      </header>
+      <PageHeader
+        title="Garçom"
+        eyebrow="OPERAÇÃO / ATENDIMENTO"
+        action={<Button variant="outline" size="sm" onClick={() => load()} disabled={loading} aria-label="Atualizar pedidos"><RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? "animate-spin" : ""}`} />Atualizar</Button>}
+      />
 
       {canCreate && <Button onClick={() => navigate("/garcom/novo")} className="w-full h-14 text-base font-bold mb-6" data-testid="waiter-new-order">
         <Plus className="w-5 h-5 mr-2" /> Novo pedido
