@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Response
 from pydantic import BaseModel, EmailStr, Field
 from pymongo.errors import DuplicateKeyError
 
@@ -31,6 +31,25 @@ def _authorize(provided: str) -> None:
     expected = module_api_key()
     if not provided or not secrets.compare_digest(provided, expected):
         raise HTTPException(401, "Chave de módulo inválida")
+
+
+def _runtime_diagnostics_enabled() -> bool:
+    """Keep the temporary runtime check unavailable unless explicitly enabled."""
+    return os.environ.get("HANDOFF_RUNTIME_DIAGNOSTICS", "").strip().lower() == "true"
+
+
+@router.get("/handoff-runtime-diagnostics", include_in_schema=False)
+async def handoff_runtime_diagnostics(response: Response, x_module_key: str = Header(default="")):
+    """Return only the contract match, never the configured issuer itself."""
+    if not _runtime_diagnostics_enabled():
+        raise HTTPException(404, "Não encontrado")
+    _authorize(x_module_key)
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "issuer_matches_contract": secrets.compare_digest(
+            os.environ.get("HANDOFF_ISSUER", ""), "dacot-hub"
+        )
+    }
 
 
 @router.post("/provision")

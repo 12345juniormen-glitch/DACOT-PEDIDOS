@@ -1,0 +1,30 @@
+name: Handoff runtime diagnostics tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "backend/modules/provisioning/routes.py"
+      - "backend/tests/test_handoff_runtime_diagnostics.py"
+      - ".github/workflows/handoff-runtime-diagnostics-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  handoff-runtime-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install isolated test dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Run issuer diagnostics unit tests
+        working-directory: backend
+        run: python -m pytest tests/test_handoff_runtime_diagnostics.py -q
