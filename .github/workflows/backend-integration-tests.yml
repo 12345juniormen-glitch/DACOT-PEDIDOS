@@ -1,0 +1,52 @@
+name: Pedidos backend integration tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-integration-tests.yml"
+  push:
+    branches: [main, "feature/**", "fix/**"]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-integration-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  direct-login:
+    name: Direct login with isolated MongoDB
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install verified temporary MongoDB binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          MONGO_VERSION="8.0.29"
+          MONGO_ARCHIVE="mongodb-linux-x86_64-ubuntu2404-${MONGO_VERSION}.tgz"
+          MONGO_SHA256="c897be96bdda032de38881f61add98348adb0022bd9766a6956160951b96ed00"
+          MONGO_ROOT="$RUNNER_TEMP/mongodb-${MONGO_VERSION}"
+          curl --fail --silent --show-error --location "https://fastdl.mongodb.org/linux/${MONGO_ARCHIVE}" --output "$RUNNER_TEMP/${MONGO_ARCHIVE}"
+          printf '%s  %s\n' "$MONGO_SHA256" "$RUNNER_TEMP/${MONGO_ARCHIVE}" | sha256sum --check --status
+          mkdir -p "$MONGO_ROOT"
+          tar -xzf "$RUNNER_TEMP/${MONGO_ARCHIVE}" --strip-components=1 -C "$MONGO_ROOT"
+          test -x "$MONGO_ROOT/bin/mongod"
+          echo "MONGOD_PATH=$MONGO_ROOT/bin/mongod" >> "$GITHUB_ENV"
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+      - name: Run direct-login unit coverage
+        run: python -m pytest -c backend/pytest.ini -n 0 backend/tests/test_orders_direct_login.py
+      - name: Run real MongoDB direct-login and handoff coverage
+        run: python backend/tests/run_local_integration.py --mongod "$MONGOD_PATH" --direct-login-only --serial

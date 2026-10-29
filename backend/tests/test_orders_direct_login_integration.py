@@ -1,0 +1,185 @@
+"""Real-Mongo integration coverage for Hub-backed Pedidos direct login.
+
+Runs only through ``run_local_integration.py``.  Its Hub simulator implements
+the exact versioned service boundary, while MongoDB and the Pedidos API are
+real loopback processes.
+"""
+import concurrent.futures
+import os
+import threading
+import uuid
+
+import pytest
+import requests
+from pymongo import MongoClient
+
+
+pytestmark = pytest.mark.skipif(
+    os.environ.get("DACOT_LOCAL_INTEGRATION") != "1"
+    or not os.environ.get("REACT_APP_BACKEND_URL", "").startswith("http://127.0.0.1:"),
+    reason="Only the disposable loopback integration runner may run these tests",
+)
+
+API = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/") + "/api"
+HUB = os.environ.get("HUB_BASE_URL", "").rstrip("/")
+CONTROL_KEY = os.environ.get("WHATSAPP_TEST_CONTROL_SECRET", "")
+PASSWORD = "direct-login-test-password"
+
+
+def _identity(email, *, tenant=None, user=None, role="waiter"):
+    return {
+        "contract_version": 1,
+        "user_id": user or uuid.uuid4().hex[:24],
+        "restaurant_id": tenant or uuid.uuid4().hex[:24],
+        "name": "Funcionário de Teste",
+        "email": email,
+        "module": "orders",
+        "role": role,
+        "access_versions": {"user": 1, "tenant": 1, "module": 1},
+    }
+
+
+def _configure(email, identity=None, *, mode="success", password=PASSWORD, access_active=True):
+    payload = {"email": email, "mode": mode, "password": password, "access_active": access_active}
+    if identity is not None:
+        payload["identity"] = identity
+    response = requests.post(
+        f"{HUB}/test/direct-login/configure", json=payload,
+        headers={"X-Test-Control": CONTROL_KEY}, timeout=10,
+    )
+    assert response.status_code == 200, response.text
+
+
+def _set_access(identity, active):
+    response = requests.post(
+        f"{HUB}/test/direct-login/access-state",
+        json={"restaurant_id": identity["restaurant_id"], "subject": f"tenant_user:{identity['user_id']}", "active": active},
+        headers={"X-Test-Control": CONTROL_KEY}, timeout=10,
+    )
+    assert response.status_code == 200, response.text
+
+
+def _login(email, password=PASSWORD):
+    return requests.post(f"{API}/auth/login", json={"email": email, "password": password}, timeout=15)
+
+
+def _db():
+    return MongoClient(os.environ["MONGO_URL"])[os.environ["DB_NAME"]]
+
+
+def test_direct_login_creates_passwordless_mirror_and_operational_session():
+    email = f"direct-{uuid.uuid4().hex}@example.test"
+    identity = _identity(email)
+    _configure(email, identity)
+
+    response = _login(email)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["user"]["restaurant_id"] == identity["restaurant_id"]
+    assert body["user"]["role"] == identity["role"]
+    assert "password_hash" not in body
+    assert "password_hash" not in body["user"]
+
+    user = _db().users.find_one({"restaurant_id": identity["restaurant_id"], "hub_user_id": identity["user_id"]})
+    assert user and user["account_origin"] == "hub"
+    assert user["provisioned_by"] == "hub_direct_login"
+    assert "password_hash" not in user
+    assert _db().restaurants.count_documents({"id": identity["restaurant_id"]}) == 1
+
+    me = requests.get(f"{API}/auth/me", headers={"Authorization": f"Bearer {body['token']}"}, timeout=10)
+    assert me.status_code == 200, me.text
+
+
+@pytest.mark.parametrize("reason", ["invalid_credentials", "inactive_user", "suspended_tenant", "module_disabled", "grant_revoked"])
+def test_hub_authorization_denials_are_generic_and_fail_closed(reason):
+    email = f"denied-{reason}-{uuid.uuid4().hex}@example.test"
+    identity = _identity(email)
+    _configure(email, identity, mode="deny")
+
+    response = _login(email)
+    assert response.status_code == 401
+    assert "password" not in response.text.lower()
+    assert _db().users.count_documents({"hub_user_id": identity["user_id"]}) == 0
+
+
+@pytest.mark.parametrize("mode", ["malformed", "server_error", "disconnect"])
+def test_hub_failures_are_fail_closed(mode):
+    email = f"failure-{mode}-{uuid.uuid4().hex}@example.test"
+    identity = _identity(email)
+    _configure(email, identity, mode=mode)
+
+    response = _login(email)
+    assert response.status_code == 503
+    assert "password" not in response.text.lower()
+    assert _db().users.count_documents({"hub_user_id": identity["user_id"]}) == 0
+
+
+def test_invalid_password_and_revoked_authority_do_not_issue_or_keep_access():
+    email = f"revoked-{uuid.uuid4().hex}@example.test"
+    identity = _identity(email)
+    _configure(email, identity)
+    assert _login(email, "wrong-password").status_code == 401
+
+    login = _login(email)
+    assert login.status_code == 200, login.text
+    _set_access(identity, False)
+    revoked = requests.get(f"{API}/auth/me", headers={"Authorization": f"Bearer {login.json()['token']}"}, timeout=10)
+    assert revoked.status_code == 403
+
+
+def test_concurrent_direct_logins_create_one_real_mongo_mirror():
+    email = f"parallel-{uuid.uuid4().hex}@example.test"
+    identity = _identity(email)
+    _configure(email, identity)
+    barrier = threading.Barrier(8)
+
+    def attempt(_index):
+        barrier.wait(timeout=10)
+        return _login(email)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        responses = list(pool.map(attempt, range(8)))
+
+    assert [response.status_code for response in responses] == [200] * 8
+    ids = {response.json()["user"]["id"] for response in responses}
+    assert len(ids) == 1
+    assert _db().users.count_documents({"restaurant_id": identity["restaurant_id"], "hub_user_id": identity["user_id"]}) == 1
+    assert _db().restaurants.count_documents({"id": identity["restaurant_id"]}) == 1
+
+
+def test_existing_mirror_keeps_operational_id_and_history_when_hub_profile_changes():
+    email = f"history-{uuid.uuid4().hex}@example.test"
+    identity = _identity(email, role="waiter")
+    _configure(email, identity)
+    first = _login(email)
+    assert first.status_code == 200, first.text
+    local_id = first.json()["user"]["id"]
+    _db().orders.insert_one({"id": uuid.uuid4().hex, "restaurant_id": identity["restaurant_id"], "created_by": local_id})
+
+    identity["name"] = "Nome Atualizado"
+    identity["role"] = "manager"
+    _configure(email, identity)
+    second = _login(email)
+    assert second.status_code == 200, second.text
+    assert second.json()["user"]["id"] == local_id
+    stored = _db().users.find_one({"id": local_id})
+    assert stored["name"] == "Nome Atualizado" and stored["role"] == "manager"
+    assert _db().orders.count_documents({"restaurant_id": identity["restaurant_id"], "created_by": local_id}) == 1
+
+
+def test_legacy_email_collision_is_never_adopted_as_a_hub_identity():
+    email = f"legacy-{uuid.uuid4().hex}@example.test"
+    legacy_id = uuid.uuid4().hex
+    legacy_tenant = uuid.uuid4().hex[:24]
+    _db().users.insert_one({
+        "id": legacy_id, "restaurant_id": legacy_tenant, "email": email,
+        "name": "Legado", "role": "waiter", "active": True,
+        "account_origin": "legacy", "password_hash": "",
+    })
+    # A network-level failure would yield 503 if Pedidos attempted to route a
+    # legacy record through the Hub.  It must instead remain a local generic 401.
+    _configure(email, _identity(email), mode="disconnect")
+    denied = _login(email, "not-a-local-password")
+    assert denied.status_code == 401
+    legacy = _db().users.find_one({"id": legacy_id})
+    assert legacy["restaurant_id"] == legacy_tenant and "hub_user_id" not in legacy
