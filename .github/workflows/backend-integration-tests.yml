@@ -43,10 +43,13 @@ jobs:
           test -x "$MONGO_ROOT/bin/mongod"
           echo "MONGOD_PATH=$MONGO_ROOT/bin/mongod" >> "$GITHUB_ENV"
       - name: Install backend dependencies
+        working-directory: backend
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r backend/requirements.txt
+          python -m pip install -r requirements.txt
       - name: Run direct-login unit coverage
-        run: python -m pytest -c backend/pytest.ini -n 0 backend/tests/test_orders_direct_login.py
+        working-directory: backend
+        run: python -m pytest -c pytest.ini -n 0 tests/test_orders_direct_login.py
       - name: Run real MongoDB direct-login and handoff coverage
-        run: python backend/tests/run_local_integration.py --mongod "$MONGOD_PATH" --direct-login-only --serial
+        working-directory: backend
+        run: python tests/run_local_integration.py --mongod "$MONGOD_PATH" --direct-login-only --serial
