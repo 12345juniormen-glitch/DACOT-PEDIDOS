@@ -68,7 +68,7 @@ def _db():
 
 
 def test_direct_login_creates_passwordless_mirror_and_operational_session():
-    email = f"direct-{uuid.uuid4().hex}@example.test"
+    email = f"direct-{uuid.uuid4().hex}@example.com"
     identity = _identity(email)
     _configure(email, identity)
 
@@ -92,7 +92,7 @@ def test_direct_login_creates_passwordless_mirror_and_operational_session():
 
 @pytest.mark.parametrize("reason", ["invalid_credentials", "inactive_user", "suspended_tenant", "module_disabled", "grant_revoked"])
 def test_hub_authorization_denials_are_generic_and_fail_closed(reason):
-    email = f"denied-{reason}-{uuid.uuid4().hex}@example.test"
+    email = f"denied-{reason}-{uuid.uuid4().hex}@example.com"
     identity = _identity(email)
     _configure(email, identity, mode="deny")
 
@@ -104,7 +104,7 @@ def test_hub_authorization_denials_are_generic_and_fail_closed(reason):
 
 @pytest.mark.parametrize("mode", ["malformed", "server_error", "disconnect"])
 def test_hub_failures_are_fail_closed(mode):
-    email = f"failure-{mode}-{uuid.uuid4().hex}@example.test"
+    email = f"failure-{mode}-{uuid.uuid4().hex}@example.com"
     identity = _identity(email)
     _configure(email, identity, mode=mode)
 
@@ -115,7 +115,7 @@ def test_hub_failures_are_fail_closed(mode):
 
 
 def test_invalid_password_and_revoked_authority_do_not_issue_or_keep_access():
-    email = f"revoked-{uuid.uuid4().hex}@example.test"
+    email = f"revoked-{uuid.uuid4().hex}@example.com"
     identity = _identity(email)
     _configure(email, identity)
     assert _login(email, "wrong-password").status_code == 401
@@ -128,7 +128,7 @@ def test_invalid_password_and_revoked_authority_do_not_issue_or_keep_access():
 
 
 def test_concurrent_direct_logins_create_one_real_mongo_mirror():
-    email = f"parallel-{uuid.uuid4().hex}@example.test"
+    email = f"parallel-{uuid.uuid4().hex}@example.com"
     identity = _identity(email)
     _configure(email, identity)
     barrier = threading.Barrier(8)
@@ -148,7 +148,7 @@ def test_concurrent_direct_logins_create_one_real_mongo_mirror():
 
 
 def test_existing_mirror_keeps_operational_id_and_history_when_hub_profile_changes():
-    email = f"history-{uuid.uuid4().hex}@example.test"
+    email = f"history-{uuid.uuid4().hex}@example.com"
     identity = _identity(email, role="waiter")
     _configure(email, identity)
     first = _login(email)
@@ -168,7 +168,7 @@ def test_existing_mirror_keeps_operational_id_and_history_when_hub_profile_chang
 
 
 def test_legacy_email_collision_is_never_adopted_as_a_hub_identity():
-    email = f"legacy-{uuid.uuid4().hex}@example.test"
+    email = f"legacy-{uuid.uuid4().hex}@example.com"
     legacy_id = uuid.uuid4().hex
     legacy_tenant = uuid.uuid4().hex[:24]
     _db().users.insert_one({

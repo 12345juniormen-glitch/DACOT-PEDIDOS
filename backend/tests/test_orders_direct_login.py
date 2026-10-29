@@ -19,7 +19,7 @@ from modules.handoff import routes as handoff_routes
 
 TENANT = "a" * 24
 HUB_USER = "c" * 24
-EMAIL = "employee@example.test"
+EMAIL = "employee@example.com"
 PASSWORD = "correct-password"
 
 
@@ -80,7 +80,7 @@ def test_hub_contract_is_strict_and_binds_the_requested_email():
     with pytest.raises(ValueError):
         hub_access._validate_direct_login_contract(_identity(extra=True), EMAIL)
     with pytest.raises(ValueError):
-        hub_access._validate_direct_login_contract(_identity(email="other@example.test"), EMAIL)
+        hub_access._validate_direct_login_contract(_identity(email="other@example.com"), EMAIL)
     with pytest.raises(ValueError):
         hub_access._validate_direct_login_contract(_identity(access_versions={"user": 1}), EMAIL)
 
@@ -319,11 +319,11 @@ def test_direct_mirror_does_not_cross_restaurant_boundaries(monkeypatch):
 
     async def exercise():
         first = await handoff_routes._find_or_create_user(
-            TENANT, HUB_USER, "waiter", name="A", email="a@example.test",
+            TENANT, HUB_USER, "waiter", name="A", email="a@example.com",
             provisioned_by="hub_direct_login",
         )
         second = await handoff_routes._find_or_create_user(
-            "b" * 24, "hub-user-2", "waiter", name="B", email="b@example.test",
+            "b" * 24, "hub-user-2", "waiter", name="B", email="b@example.com",
             provisioned_by="hub_direct_login",
         )
         return first, second
