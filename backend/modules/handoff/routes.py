@@ -173,26 +173,49 @@ async def _find_or_create_restaurant(restaurant_id: str) -> dict:
     return doc
 
 
-async def _find_or_create_user(restaurant_id: str, hub_user_id: str, role: str) -> dict:
-    """Find or create a local user mirrored from the Hub. Handoff-only accounts have no password."""
+async def _find_or_create_user(
+    restaurant_id: str,
+    hub_user_id: str,
+    role: str,
+    *,
+    name: str | None = None,
+    email: str | None = None,
+    provisioned_by: str = "hub_handoff",
+) -> dict:
+    """Idempotently mirror one Hub identity without ever receiving its password.
+
+    The ``(restaurant_id, hub_user_id)`` key is the only identity bridge.  A
+    local user sharing an email address is deliberately never adopted here:
+    the unique email index makes that collision fail closed instead of joining
+    two historical accounts from different authorities.
+    """
     db = get_db()
     # Try by (restaurant_id, hub_user_id)
     u = await db.users.find_one({"restaurant_id": restaurant_id, "hub_user_id": hub_user_id})
     now = datetime.now(timezone.utc).isoformat()
     if u:
-        if u.get("provisioned_by") in {"hub", "hub_handoff"}:
+        if (u.get("hub_user_id") or u.get("account_origin") == "hub"
+                or u.get("provisioned_by") in {"hub", "hub_handoff", "hub_direct_login"}):
             # Hub identities always use the Hub role preset. Local overrides
             # must not survive a role reduction performed in the Hub.
             preset = permissions_for_role(role)
+            updates = {
+                "role": role,
+                "active": True,
+                "permissions": preset,
+                "account_origin": "hub",
+                "updated_at": now,
+            }
+            if name is not None:
+                updates["name"] = name
+            if email is not None:
+                updates["email"] = email
             await db.users.update_one(
                 {"id": u["id"], "restaurant_id": restaurant_id},
-                {"$set": {"role": role, "active": True, "permissions": preset,
-                          "updated_at": now},
+                {"$set": updates,
                  "$unset": {"custom_role_id": ""}},
             )
-            u["role"] = role
-            u["active"] = True
-            u["permissions"] = preset
+            u.update(updates)
             u.pop("custom_role_id", None)
         elif u.get("role") != role or not u.get("active", True):
             await db.users.update_one(
@@ -211,17 +234,22 @@ async def _find_or_create_user(restaurant_id: str, hub_user_id: str, role: str) 
         "id": str(uuid.uuid4()),
         "restaurant_id": restaurant_id,
         "hub_user_id": hub_user_id,
-        "email": synthetic_email,
-        "password_hash": "",  # handoff-only, cannot log in via local /auth/login
-        "name": f"Usuário Hub {hub_user_id[:8]}",
+        "email": email or synthetic_email,
+        "name": name or f"Usuário Hub {hub_user_id[:8]}",
         "role": role,
         "permissions": permissions_for_role(role),
         "active": True,
         "must_change_password": False,
         "created_at": now,
         "updated_at": now,
-        "provisioned_by": "hub_handoff",
+        "provisioned_by": provisioned_by,
+        "account_origin": "hub",
     }
+    # Handoff predates direct-login and historically stored an empty marker.
+    # Direct-login mirrors deliberately omit the field: a Hub password is never
+    # copied, transformed or retained by Pedidos.
+    if provisioned_by != "hub_direct_login":
+        doc["password_hash"] = ""
     try:
         await db.users.insert_one(doc)
     except DuplicateKeyError:
