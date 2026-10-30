@@ -1,17 +1,20 @@
 """Auth models & routes: login, /me. Registration is admin-only (out of scope for MVP)."""
 import hashlib
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
 from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 from core.db import get_db
 from core.deps import get_current_user
 from core.security import create_access_token, hash_password, verify_password
 from core.permissions import effective_permissions
-from core.hub_access import fetch_hub_access_context
+from core.hub_access import authenticate_orders_direct_login, fetch_hub_access_context
+from modules.handoff.routes import _find_or_create_restaurant, _find_or_create_user
 
 
 UserRole = Literal["admin", "manager", "waiter", "kitchen"]
@@ -52,6 +55,46 @@ class LoginResponse(BaseModel):
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _orders_direct_login_enabled() -> bool:
+    """Keep the migration path inert until both services are enabled together."""
+    return os.environ.get("ORDERS_DIRECT_LOGIN_ENABLED", "false").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+def _is_hub_managed_user(user: dict | None) -> bool:
+    return bool(user and (
+        user.get("hub_user_id")
+        or user.get("account_origin") == "hub"
+        or user.get("provisioned_by") in {"hub", "hub_handoff", "hub_direct_login"}
+    ))
+
+
+async def _login_response(user: dict, hub_access: dict | None = None) -> LoginResponse:
+    """Issue the existing Pedidos session format for either account authority."""
+    db = get_db()
+    token = create_access_token(
+        user_id=user["id"],
+        restaurant_id=user["restaurant_id"],
+        role=user.get("role", "admin"),
+        email=user["email"],
+        hub_access=hub_access,
+    )
+    user = user.copy()
+    user.pop("_id", None)
+    user.pop("password_hash", None)
+    user.setdefault("active", True)
+    user.setdefault("must_change_password", False)
+    user["permissions"] = effective_permissions(user)
+    if user.get("custom_role_id"):
+        custom_role = await db.custom_roles.find_one(
+            {"id": user["custom_role_id"], "restaurant_id": user["restaurant_id"]},
+            {"_id": 0, "name": 1},
+        )
+        user["custom_role_name"] = custom_role.get("name") if custom_role else None
+    return LoginResponse(token=token, user=UserPublic(**user))
 
 
 @router.post("/first-access")
@@ -106,36 +149,62 @@ async def login(payload: LoginInput, request: Request):
                 headers={"Retry-After": str(window_seconds - int(now.timestamp()) % window_seconds)},
             )
     user = await db.users.find_one({"email": email})
-    if not user or not verify_password(payload.password, user["password_hash"]):
+
+    if not _orders_direct_login_enabled():
+        # Until the coordinated migration is enabled, retain the pre-existing
+        # login behavior exactly, including Hub access-context refreshes for
+        # historical mirrored accounts.
+        if not user or not verify_password(payload.password, user.get("password_hash", "")):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email ou senha inválidos")
+        if not user.get("active", True):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email ou senha inválidos")
+        hub_access = None
+        if user.get("hub_user_id"):
+            hub_access = await fetch_hub_access_context(
+                user["restaurant_id"], user["hub_user_id"], user.get("role", "admin")
+            )
+        return await _login_response(user, hub_access)
+
+    if not user or _is_hub_managed_user(user):
+        # Existing Hub mirrors and new Hub identities authenticate only through
+        # the Hub.  A failure there is never retried against a local password.
+        identity = await authenticate_orders_direct_login(email, payload.password)
+        if not identity:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email ou senha inválidos")
+        try:
+            await _find_or_create_restaurant(identity["restaurant_id"])
+            user = await _find_or_create_user(
+                identity["restaurant_id"],
+                identity["user_id"],
+                identity["role"],
+                name=identity["name"],
+                email=identity["email"],
+                provisioned_by="hub_direct_login",
+            )
+        except DuplicateKeyError:
+            # A duplicate email owned by a legacy account must not join two
+            # authorities.  Do not reveal which record produced the conflict.
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email ou senha inválidos")
+        return await _login_response(user, identity["access_versions"])
+
+    # A pre-existing account with no Hub marker is an explicit legacy path.
+    # It is intentionally kept separate so a Hub outage cannot cause a
+    # managed identity to fall back to a stale local password.
+    if not user or _is_hub_managed_user(user) or not verify_password(payload.password, user.get("password_hash", "")):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email ou senha inválidos")
     if not user.get("active", True):
         # Mesma mensagem genérica de credenciais inválidas: não revela que a conta existe e está desativada.
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email ou senha inválidos")
-
-    hub_access = None
-    if user.get("hub_user_id"):
-        hub_access = await fetch_hub_access_context(
-            user["restaurant_id"], user["hub_user_id"], user.get("role", "admin")
+    if "account_origin" not in user:
+        # Existing operational accounts predate the migration.  Marking their
+        # successful local login makes the authority explicit without changing
+        # their identifier, password or operational history.
+        await db.users.update_one(
+            {"id": user["id"], "restaurant_id": user["restaurant_id"], "hub_user_id": {"$exists": False}},
+            {"$set": {"account_origin": "legacy", "updated_at": datetime.now(timezone.utc).isoformat()}},
         )
-    token = create_access_token(
-        user_id=user["id"],
-        restaurant_id=user["restaurant_id"],
-        role=user.get("role", "admin"),
-        email=user["email"],
-        hub_access=hub_access,
-    )
-    user.pop("_id", None)
-    user.pop("password_hash", None)
-    user.setdefault("active", True)
-    user.setdefault("must_change_password", False)
-    user["permissions"] = effective_permissions(user)
-    if user.get("custom_role_id"):
-        custom_role = await db.custom_roles.find_one(
-            {"id": user["custom_role_id"], "restaurant_id": user["restaurant_id"]},
-            {"_id": 0, "name": 1},
-        )
-        user["custom_role_name"] = custom_role.get("name") if custom_role else None
-    return LoginResponse(token=token, user=UserPublic(**user))
+        user["account_origin"] = "legacy"
+    return await _login_response(user)
 
 
 @router.get("/me", response_model=UserPublic)

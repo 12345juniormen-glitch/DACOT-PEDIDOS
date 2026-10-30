@@ -69,13 +69,84 @@ class LocalHub(BaseHTTPRequestHandler):
     def do_POST(self):
         body = self._body()
         parts = self.path.strip("/").split("/")
+        if self.path == "/test/direct-login/configure":
+            if self.headers.get("X-Test-Control") != self.server.test_control:
+                self.send_error(403)
+                return
+            try:
+                payload = json.loads(body)
+                email = str(payload["email"]).lower()
+                mode = payload.get("mode", "success")
+            except (ValueError, KeyError, TypeError):
+                self.send_error(400)
+                return
+            if mode not in {"success", "deny", "malformed", "server_error", "disconnect"}:
+                self.send_error(400)
+                return
+            self.server.direct_login_accounts[email] = payload
+            identity = payload.get("identity")
+            if isinstance(identity, dict):
+                subject = f"tenant_user:{identity.get('user_id', '')}"
+                self.server.access_states[(identity.get("restaurant_id"), subject)] = bool(
+                    payload.get("access_active", True)
+                )
+            self._json(200, {"ok": True})
+            return
+        if self.path == "/test/direct-login/access-state":
+            if self.headers.get("X-Test-Control") != self.server.test_control:
+                self.send_error(403)
+                return
+            try:
+                payload = json.loads(body)
+                key = (str(payload["restaurant_id"]), str(payload["subject"]))
+                self.server.access_states[key] = bool(payload["active"])
+            except (ValueError, KeyError, TypeError):
+                self.send_error(400)
+                return
+            self._json(200, {"ok": True})
+            return
+        if self.path == "/api/internal/modules/orders/direct-login/v1":
+            if self.headers.get("X-Module-Key") != self.server.module_key:
+                self.send_error(401)
+                return
+            try:
+                payload = json.loads(body)
+                if set(payload) != {"email", "password"}:
+                    raise ValueError()
+                email = str(payload["email"]).lower()
+                password = str(payload["password"])
+            except (ValueError, TypeError):
+                self.send_error(422)
+                return
+            account = self.server.direct_login_accounts.get(email)
+            if not account or password != account.get("password") or account.get("mode") == "deny":
+                self._json(401, {"detail": "Credenciais inválidas"})
+                return
+            if account.get("mode") == "server_error":
+                self.send_error(500)
+                return
+            if account.get("mode") == "disconnect":
+                self.close_connection = True
+                self.connection.close()
+                return
+            if account.get("mode") == "malformed":
+                self._json(200, {"contract_version": 1, "unexpected": True})
+                return
+            self._json(200, account["identity"])
+            return
         if (len(parts) == 7 and parts[:3] == ["api", "public", "tenants"]
                 and parts[4:] == ["modules", "orders", "access"]):
             if self.headers.get("X-Module-Key") != self.server.module_key:
                 self.send_error(403)
                 return
             tenant = parts[3]
-            self._json(200, {"active": tenant != "0" * 24})
+            try:
+                request = json.loads(body)
+                subject = request["subject"]
+            except (ValueError, KeyError, TypeError):
+                self.send_error(400)
+                return
+            self._json(200, {"active": self.server.access_states.get((tenant, subject), tenant != "0" * 24)})
             return
         if self.path.startswith("/test/provider/"):
             if self.headers.get("X-Test-Control") != self.server.test_control:
@@ -176,12 +247,13 @@ def main():
     parser.add_argument("--handoff-only", action="store_true", help="Run only concurrent handoff regression tests")
     parser.add_argument("--permissions-only", action="store_true", help="Run only auth/user permission regression tests")
     parser.add_argument("--whatsapp-only", action="store_true", help="Run only WhatsApp provider integration tests")
+    parser.add_argument("--direct-login-only", action="store_true", help="Run Hub-backed direct-login integration tests")
     parser.add_argument("--products-only", action="store_true", help="Run only product integration tests")
     parser.add_argument("--serial", action="store_true", help="Disable pytest-xdist for diagnosis of shared-fixture races")
     args = parser.parse_args()
     mongod = args.mongod.resolve(strict=True)
-    if mongod.name.lower() != "mongod.exe":
-        parser.error("--mongod must point to a mongod.exe binary")
+    if mongod.name.lower() not in {"mongod", "mongod.exe"}:
+        parser.error("--mongod must point to a mongod binary")
 
     mongo_port, hub_port, api_port = free_port(), free_port(), free_port()
     test_id = secrets.token_hex(8)
@@ -215,6 +287,8 @@ def main():
         "NO_PROXY": "127.0.0.1,localhost",
         "no_proxy": "127.0.0.1,localhost",
     })
+    if args.direct_login_only:
+        env["ORDERS_DIRECT_LOGIN_ENABLED"] = "true"
     hub = ThreadingHTTPServer(("127.0.0.1", hub_port), LocalHub)
     hub.module_key = module_key
     hub.provider_secret = provider_secret
@@ -223,6 +297,8 @@ def main():
         tenant: {"state": "connected", "connected": True, "qr_data_url": None, "phone": "5511999990000"}
         for tenant in ("wa-t1", "wa-t2")
     }
+    hub.direct_login_accounts = {}
+    hub.access_states = {}
     hub_thread = threading.Thread(target=hub.serve_forever, daemon=True)
     hub_thread.start()
 
@@ -264,6 +340,13 @@ def main():
                                 "tests/backend_test.py::TestProductPermanentDelete",
                                 "tests/backend_test.py::TestProductPreparationEstimate",
                             ] if args.products_only
+                            else [
+                                "tests/test_orders_direct_login_integration.py",
+                                "tests/test_hub_custom_role_contract.py",
+                                "tests/test_handoff_concurrency.py",
+                                "tests/test_p0_local.py::test_login_rate_limit_is_shared_and_returns_retry_after",
+                            ]
+                            if args.direct_login_only
                             else TESTS)
                 workers = ["-n", "0"] if args.serial else []
                 result = subprocess.run([sys.executable, "-m", "pytest", *selected, *workers, "-q", "-ra"], cwd=BACKEND, env=env)

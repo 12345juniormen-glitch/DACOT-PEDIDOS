@@ -14,6 +14,11 @@ MAX_ENTRIES = 10000
 _leases = OrderedDict()
 # Fixed-size striped locks bound memory and coalesce requests for the same identity.
 _locks = [asyncio.Lock() for _ in range(64)]
+_DIRECT_LOGIN_FIELDS = {
+    "contract_version", "user_id", "restaurant_id", "name", "email",
+    "module", "role", "access_versions",
+}
+_DIRECT_LOGIN_ROLES = {"admin", "manager", "waiter", "kitchen"}
 
 
 def validate_handoff_configuration():
@@ -66,6 +71,79 @@ def module_api_key():
     if len(values) != 1:
         raise HTTPException(503, "Configure MODULE_API_KEY sem aliases conflitantes")
     return next(iter(values))
+
+
+def _hub_base_url() -> str:
+    """Return the one validated Hub origin used by every service-to-service call."""
+    base = os.environ.get("HUB_BASE_URL", "").rstrip("/")
+    parsed = urlsplit(base)
+    if (not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment
+            or parsed.path not in ("", "/") or "\\" in base
+            or any(ord(char) <= 32 for char in base)):
+        raise ValueError()
+    if parsed.scheme != "https" and not (
+        os.environ.get("APP_ENV") == "development" and parsed.scheme == "http"
+        and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+    ):
+        raise ValueError()
+    return base
+
+
+def _validate_direct_login_contract(body, email: str) -> dict:
+    """Validate the versioned Hub response before it can create a local session."""
+    if not isinstance(body, dict) or set(body) != _DIRECT_LOGIN_FIELDS:
+        raise ValueError()
+    if body.get("contract_version") != 1 or body.get("module") != "orders":
+        raise ValueError()
+    if body.get("role") not in _DIRECT_LOGIN_ROLES:
+        raise ValueError()
+    if any(not isinstance(body.get(field), str) or not body[field].strip()
+           for field in ("user_id", "restaurant_id", "name", "email")):
+        raise ValueError()
+    restaurant_id = body["restaurant_id"]
+    if len(restaurant_id) != 24 or any(char not in "0123456789abcdefABCDEF" for char in restaurant_id):
+        raise ValueError()
+    user_id = body["user_id"]
+    if len(user_id) != 24 or any(char not in "0123456789abcdefABCDEF" for char in user_id):
+        raise ValueError()
+    if body["email"].lower().strip() != email:
+        raise ValueError()
+    context = body.get("access_versions")
+    try:
+        validate_context(context)
+    except HTTPException as exc:
+        # A malformed service response is an operational failure, never a
+        # credential denial that could trigger a local fallback.
+        raise ValueError() from exc
+    return body
+
+
+async def authenticate_orders_direct_login(email: str, password: str) -> dict | None:
+    """Authenticate credentials only with the Hub's default-off direct-login API.
+
+    A valid result is strict and self-contained.  ``None`` means generic
+    credential denial; operational or contract failures raise a generic 503 so
+    a Hub-managed identity is never silently authenticated locally.
+    """
+    try:
+        base = _hub_base_url()
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=False, trust_env=False) as client:
+            result = await client.post(
+                f"{base}/api/internal/modules/orders/direct-login/v1",
+                headers={"X-Module-Key": module_api_key()},
+                json={"email": email, "password": password},
+            )
+        if result.status_code == 401:
+            return None
+        if result.status_code == 429:
+            raise HTTPException(429, "Muitas tentativas de login. Tente novamente mais tarde.")
+        if result.status_code != 200:
+            raise ValueError()
+        return _validate_direct_login_contract(result.json(), email)
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError, AttributeError):
+        raise HTTPException(503, "Não foi possível confirmar as credenciais no Hub; tente novamente")
 
 
 async def check_hub_access(restaurant_id, hub_user_id, role, context, *, fresh=False):
