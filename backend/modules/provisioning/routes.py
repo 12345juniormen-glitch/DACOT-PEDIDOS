@@ -245,6 +245,6 @@ async def set_hub_user_custom_role(
     )
     # The active check is repeated in the atomic write so a concurrent
     # deactivation cannot receive a successful administrative response.
-    if not updated:
+    if updated is None:
         raise HTTPException(404, "Usuário Hub não encontrado")
     return {"custom_role": _custom_role_out(role)}
