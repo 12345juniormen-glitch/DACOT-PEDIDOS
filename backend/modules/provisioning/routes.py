@@ -37,6 +37,10 @@ class DirectProvisionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     tenant_id: str = Field(min_length=24, max_length=24)
+    # Only the authenticated HUB may supply this on the first provisioning.
+    # Omitting it retains the stricter pre-bound-restaurant behavior used by
+    # existing direct-provision callers.
+    tenant_name: str | None = Field(default=None, min_length=1, max_length=160)
     hub_user_id: str = Field(min_length=1, max_length=128)
     name: str = Field(min_length=1, max_length=120)
     email: EmailStr
@@ -65,6 +69,41 @@ async def _hub_restaurant(db, tenant_id: str) -> dict:
     if not restaurant:
         raise HTTPException(404, "Restaurante Hub não encontrado")
     return restaurant
+
+
+async def _ensure_hub_restaurant(db, tenant_id: str, tenant_name: str) -> dict:
+    """Create or validate the one-to-one Hub restaurant binding.
+
+    This is deliberately reachable only after the module-key check.  It
+    mirrors the legacy provisioning collision checks while avoiding its
+    invitation/password side effects for Hub-managed identities.
+    """
+    restaurant = await db.restaurants.find_one({"id": tenant_id})
+    conflicting = await db.restaurants.find_one({"hub_tenant_id": tenant_id})
+    if conflicting and conflicting.get("id") != tenant_id:
+        raise HTTPException(409, "Tenant já está vinculado a outro restaurante")
+    if restaurant and restaurant.get("hub_tenant_id") not in (None, tenant_id):
+        raise HTTPException(409, "Restaurante já está vinculado a outro tenant")
+
+    now = datetime.now(timezone.utc).isoformat()
+    if restaurant:
+        update = {"hub_tenant_id": tenant_id, "updated_at": now}
+        if restaurant.get("provisioned_by") in {"hub", "hub_handoff"}:
+            update["name"] = tenant_name.strip()
+        await db.restaurants.update_one({"id": tenant_id}, {"$set": update})
+        return await _hub_restaurant(db, tenant_id)
+
+    try:
+        await db.restaurants.insert_one({
+            "id": tenant_id, "hub_tenant_id": tenant_id,
+            "name": tenant_name.strip(), "provisioned_by": "hub",
+            "created_at": now, "updated_at": now,
+        })
+    except DuplicateKeyError:
+        # A concurrent request may have created this exact binding. Re-read it
+        # and fail closed for every other unique-index collision.
+        return await _hub_restaurant(db, tenant_id)
+    return await _hub_restaurant(db, tenant_id)
 
 
 async def _custom_role(db, tenant_id: str, custom_role_id: str | None) -> dict | None:
@@ -191,7 +230,10 @@ async def provision_hub_direct_identity(payload: DirectProvisionInput, x_module_
     _authorize(x_module_key)
     tenant_id = _tenant_id(payload.tenant_id)
     db = get_db()
-    await _hub_restaurant(db, tenant_id)
+    if payload.tenant_name is None:
+        await _hub_restaurant(db, tenant_id)
+    else:
+        await _ensure_hub_restaurant(db, tenant_id, payload.tenant_name)
 
     # Imported lazily to keep the legacy provisioning module independent at
     # application import time while reusing the one vetted mirror lifecycle.

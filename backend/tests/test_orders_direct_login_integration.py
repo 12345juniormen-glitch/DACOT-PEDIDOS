@@ -63,13 +63,16 @@ def _login(email, password=PASSWORD):
     return requests.post(f"{API}/auth/login", json={"email": email, "password": password}, timeout=15)
 
 
-def _direct_provision(identity):
+def _direct_provision(identity, *, tenant_name=None):
+    payload = {
+        "tenant_id": identity["restaurant_id"], "hub_user_id": identity["user_id"],
+        "name": identity["name"], "email": identity["email"], "role": identity["role"],
+    }
+    if tenant_name is not None:
+        payload["tenant_name"] = tenant_name
     return requests.post(
         f"{API}/internal/hub/provision/direct/v1",
-        json={
-            "tenant_id": identity["restaurant_id"], "hub_user_id": identity["user_id"],
-            "name": identity["name"], "email": identity["email"], "role": identity["role"],
-        },
+        json=payload,
         headers={"X-Module-Key": os.environ["MODULE_API_KEY"]}, timeout=15,
     )
 
@@ -109,10 +112,8 @@ def test_direct_login_creates_passwordless_mirror_and_operational_session():
 
 def test_early_direct_provision_is_passwordless_idempotent_and_needs_module_key():
     identity = _identity(f"prepared-{uuid.uuid4().hex}@example.com")
-    # A service caller cannot create or bind an arbitrary tenant through this
-    # endpoint; operational mirrors only exist for a pre-bound Hub restaurant.
+    # Omitting the explicit tenant name retains the pre-bound requirement.
     assert _direct_provision(identity).status_code == 404
-    _bound_restaurant(identity["restaurant_id"])
 
     missing_key = requests.post(
         f"{API}/internal/hub/provision/direct/v1",
@@ -128,13 +129,16 @@ def test_early_direct_provision_is_passwordless_idempotent_and_needs_module_key(
     )
     assert invalid_key.status_code == 401
 
-    first = _direct_provision(identity)
-    second = _direct_provision(identity)
+    first = _direct_provision(identity, tenant_name="Restaurante Hub de teste")
+    second = _direct_provision(identity, tenant_name="Restaurante Hub de teste")
     assert first.status_code == second.status_code == 200
     assert first.json() == second.json() == {"ok": True}
+    restaurant = _db().restaurants.find_one({"id": identity["restaurant_id"]})
+    assert restaurant and restaurant["hub_tenant_id"] == identity["restaurant_id"]
     user = _db().users.find_one({"restaurant_id": identity["restaurant_id"], "hub_user_id": identity["user_id"]})
     assert user and user["provisioned_by"] == "hub_direct_login"
     assert "password_hash" not in user
+    assert not user.get("must_change_password")
     assert _db().first_access_tokens.count_documents({"user_id": user["id"]}) == 0
 
 
