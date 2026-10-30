@@ -226,14 +226,18 @@ async def _find_or_create_user(
                 updates["name"] = name
             if email is not None:
                 updates["email"] = email
+            unset = {} if custom_role else {"custom_role_id": ""}
+            if provisioned_by == "hub_direct_login":
+                # A Hub-managed mirror must not retain a local password marker
+                # from legacy provisioning; authentication is Hub-only.
+                unset.update({"password_hash": "", "must_change_password": ""})
             await db.users.update_one(
                 {"id": u["id"], "restaurant_id": restaurant_id},
-                {"$set": updates,
-                 **({} if custom_role else {"$unset": {"custom_role_id": ""}})},
+                {"$set": updates, **({"$unset": unset} if unset else {})},
             )
             u.update(updates)
-            if not custom_role:
-                u.pop("custom_role_id", None)
+            for field in unset:
+                u.pop(field, None)
         elif u.get("role") != role or not u.get("active", True):
             await db.users.update_one(
                 {"id": u["id"], "restaurant_id": restaurant_id},

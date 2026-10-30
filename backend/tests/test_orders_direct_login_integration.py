@@ -63,8 +63,25 @@ def _login(email, password=PASSWORD):
     return requests.post(f"{API}/auth/login", json={"email": email, "password": password}, timeout=15)
 
 
+def _direct_provision(identity):
+    return requests.post(
+        f"{API}/internal/hub/provision/direct/v1",
+        json={
+            "tenant_id": identity["restaurant_id"], "hub_user_id": identity["user_id"],
+            "name": identity["name"], "email": identity["email"], "role": identity["role"],
+        },
+        headers={"X-Module-Key": os.environ["MODULE_API_KEY"]}, timeout=15,
+    )
+
+
 def _db():
     return MongoClient(os.environ["MONGO_URL"])[os.environ["DB_NAME"]]
+
+
+def _bound_restaurant(tenant_id):
+    _db().restaurants.insert_one({
+        "id": tenant_id, "hub_tenant_id": tenant_id, "name": "Restaurante de teste",
+    })
 
 
 def test_direct_login_creates_passwordless_mirror_and_operational_session():
@@ -88,6 +105,86 @@ def test_direct_login_creates_passwordless_mirror_and_operational_session():
 
     me = requests.get(f"{API}/auth/me", headers={"Authorization": f"Bearer {body['token']}"}, timeout=10)
     assert me.status_code == 200, me.text
+
+
+def test_early_direct_provision_is_passwordless_idempotent_and_needs_module_key():
+    identity = _identity(f"prepared-{uuid.uuid4().hex}@example.com")
+    # A service caller cannot create or bind an arbitrary tenant through this
+    # endpoint; operational mirrors only exist for a pre-bound Hub restaurant.
+    assert _direct_provision(identity).status_code == 404
+    _bound_restaurant(identity["restaurant_id"])
+
+    missing_key = requests.post(
+        f"{API}/internal/hub/provision/direct/v1",
+        json={"tenant_id": identity["restaurant_id"], "hub_user_id": identity["user_id"],
+              "name": identity["name"], "email": identity["email"], "role": identity["role"]}, timeout=15,
+    )
+    assert missing_key.status_code == 401
+    invalid_key = requests.post(
+        f"{API}/internal/hub/provision/direct/v1",
+        json={"tenant_id": identity["restaurant_id"], "hub_user_id": identity["user_id"],
+              "name": identity["name"], "email": identity["email"], "role": identity["role"]},
+        headers={"X-Module-Key": "invalid"}, timeout=15,
+    )
+    assert invalid_key.status_code == 401
+
+    first = _direct_provision(identity)
+    second = _direct_provision(identity)
+    assert first.status_code == second.status_code == 200
+    assert first.json() == second.json() == {"ok": True}
+    user = _db().users.find_one({"restaurant_id": identity["restaurant_id"], "hub_user_id": identity["user_id"]})
+    assert user and user["provisioned_by"] == "hub_direct_login"
+    assert "password_hash" not in user
+    assert _db().first_access_tokens.count_documents({"user_id": user["id"]}) == 0
+
+
+def test_concurrent_early_provision_creates_one_mirror_and_never_adopts_legacy_email():
+    identity = _identity(f"prepared-parallel-{uuid.uuid4().hex}@example.com")
+    _bound_restaurant(identity["restaurant_id"])
+    barrier = threading.Barrier(8)
+
+    def attempt(_index):
+        barrier.wait(timeout=10)
+        return _direct_provision(identity)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        responses = list(pool.map(attempt, range(8)))
+    assert [response.status_code for response in responses] == [200] * 8
+    assert _db().users.count_documents({"restaurant_id": identity["restaurant_id"], "hub_user_id": identity["user_id"]}) == 1
+
+    legacy_email = f"legacy-provision-{uuid.uuid4().hex}@example.com"
+    _db().users.insert_one({
+        "id": uuid.uuid4().hex, "restaurant_id": uuid.uuid4().hex[:24], "email": legacy_email,
+        "name": "Legado", "role": "waiter", "active": True, "account_origin": "legacy", "password_hash": "",
+    })
+    collision = _identity(legacy_email)
+    _bound_restaurant(collision["restaurant_id"])
+    assert _direct_provision(collision).status_code == 409
+    assert _db().users.count_documents({"hub_user_id": collision["user_id"]}) == 0
+
+
+def test_early_provision_preserves_only_valid_waiter_custom_role():
+    identity = _identity(f"prepared-custom-{uuid.uuid4().hex}@example.com", role="waiter")
+    _bound_restaurant(identity["restaurant_id"])
+    assert _direct_provision(identity).status_code == 200
+    custom_role = {
+        "id": str(uuid.uuid4()), "restaurant_id": identity["restaurant_id"],
+        "name": "Garçom líder", "name_key": "garçom líder", "permissions": ["orders.view"],
+    }
+    _db().custom_roles.insert_one(custom_role)
+    assert requests.put(
+        f"{API}/internal/hub/users/{identity['user_id']}/custom-role/v1",
+        json={"tenant_id": identity["restaurant_id"], "custom_role_id": custom_role["id"]},
+        headers={"X-Module-Key": os.environ["MODULE_API_KEY"]}, timeout=15,
+    ).status_code == 200
+
+    assert _direct_provision(identity).status_code == 200
+    assert _db().users.find_one({"hub_user_id": identity["user_id"]})["custom_role_id"] == custom_role["id"]
+
+    identity["role"] = "manager"
+    assert _direct_provision(identity).status_code == 200
+    updated = _db().users.find_one({"hub_user_id": identity["user_id"]})
+    assert updated["role"] == "manager" and "custom_role_id" not in updated
 
 
 @pytest.mark.parametrize("reason", ["invalid_credentials", "inactive_user", "suspended_tenant", "module_disabled", "grant_revoked"])

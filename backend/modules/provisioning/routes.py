@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
@@ -22,6 +22,21 @@ router = APIRouter(prefix="/internal/hub", tags=["internal provisioning"])
 class ProvisionInput(BaseModel):
     tenant_id: str = Field(min_length=24, max_length=24)
     tenant_name: str = Field(min_length=1, max_length=160)
+    hub_user_id: str = Field(min_length=1, max_length=128)
+    name: str = Field(min_length=1, max_length=120)
+    email: EmailStr
+    role: Literal["admin", "manager", "waiter", "kitchen"]
+
+
+class DirectProvisionInput(BaseModel):
+    """Minimal Hub-owned identity needed to prepare a Pedidos mirror.
+
+    There is intentionally no password, invite, local role definition, or
+    browser-controlled tenant context in this contract.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_id: str = Field(min_length=24, max_length=24)
     hub_user_id: str = Field(min_length=1, max_length=128)
     name: str = Field(min_length=1, max_length=120)
     email: EmailStr
@@ -162,6 +177,44 @@ async def provision(payload: ProvisionInput, x_module_key: str = Header(default=
         "user_id": user_id, "invite_token": invite_token,
         "invite_expires_at": invite_expires_at,
     }
+
+
+@router.post("/provision/direct/v1")
+async def provision_hub_direct_identity(payload: DirectProvisionInput, x_module_key: str = Header(default="")):
+    """Prepare an idempotent passwordless Hub-managed operational mirror.
+
+    The tenant must already be bound to Hub; unlike the legacy provisioning
+    route this endpoint never creates a restaurant record, invitation, first
+    access token, or local password. That prevents an administrative team
+    edit from accidentally creating a second credential authority.
+    """
+    _authorize(x_module_key)
+    tenant_id = _tenant_id(payload.tenant_id)
+    db = get_db()
+    await _hub_restaurant(db, tenant_id)
+
+    # Imported lazily to keep the legacy provisioning module independent at
+    # application import time while reusing the one vetted mirror lifecycle.
+    from modules.handoff.routes import _find_or_create_user
+
+    try:
+        await _find_or_create_user(
+            tenant_id,
+            payload.hub_user_id,
+            payload.role,
+            name=payload.name.strip(),
+            email=str(payload.email).lower().strip(),
+            provisioned_by="hub_direct_login",
+        )
+    except DuplicateKeyError:
+        # The helper's only recoverable duplicate is a simultaneous creation
+        # of the exact Hub identity. A legacy e-mail collision remains a
+        # closed conflict and is never auto-associated.
+        raise HTTPException(409, "Conflito ao provisionar usuário")
+
+    # The caller only needs confirmation. Operational identifiers and role
+    # definitions stay inside Pedidos and are not part of this service contract.
+    return {"ok": True}
 
 
 @router.get("/custom-roles/v1")
