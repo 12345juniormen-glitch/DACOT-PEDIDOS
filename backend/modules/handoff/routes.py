@@ -173,6 +173,22 @@ async def _find_or_create_restaurant(restaurant_id: str) -> dict:
     return doc
 
 
+async def _preserved_custom_role(db, restaurant_id: str, user: dict, role: str) -> dict | None:
+    """Return a still-valid Pedidos role that may survive a HUB identity sync.
+
+    Custom roles apply only to the existing ``waiter`` base role.  A change to
+    any other HUB role intentionally removes the association rather than
+    retaining a privilege set under a different operational role.
+    """
+    custom_role_id = user.get("custom_role_id")
+    if role != "waiter" or not custom_role_id:
+        return None
+    return await db.custom_roles.find_one({
+        "id": custom_role_id,
+        "restaurant_id": restaurant_id,
+    }, {"_id": 0})
+
+
 async def _find_or_create_user(
     restaurant_id: str,
     hub_user_id: str,
@@ -196,16 +212,16 @@ async def _find_or_create_user(
     if u:
         if (u.get("hub_user_id") or u.get("account_origin") == "hub"
                 or u.get("provisioned_by") in {"hub", "hub_handoff", "hub_direct_login"}):
-            # Hub identities always use the Hub role preset. Local overrides
-            # must not survive a role reduction performed in the Hub.
-            preset = permissions_for_role(role)
+            custom_role = await _preserved_custom_role(db, restaurant_id, u, role)
             updates = {
                 "role": role,
                 "active": True,
-                "permissions": preset,
+                "permissions": list(custom_role["permissions"]) if custom_role else permissions_for_role(role),
                 "account_origin": "hub",
                 "updated_at": now,
             }
+            if custom_role:
+                updates["custom_role_id"] = custom_role["id"]
             if name is not None:
                 updates["name"] = name
             if email is not None:
@@ -213,10 +229,11 @@ async def _find_or_create_user(
             await db.users.update_one(
                 {"id": u["id"], "restaurant_id": restaurant_id},
                 {"$set": updates,
-                 "$unset": {"custom_role_id": ""}},
+                 **({} if custom_role else {"$unset": {"custom_role_id": ""}})},
             )
             u.update(updates)
-            u.pop("custom_role_id", None)
+            if not custom_role:
+                u.pop("custom_role_id", None)
         elif u.get("role") != role or not u.get("active", True):
             await db.users.update_one(
                 {"id": u["id"], "restaurant_id": restaurant_id},

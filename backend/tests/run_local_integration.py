@@ -342,6 +342,7 @@ def main():
                             ] if args.products_only
                             else [
                                 "tests/test_orders_direct_login_integration.py",
+                                "tests/test_hub_custom_role_contract.py",
                                 "tests/test_handoff_concurrency.py",
                                 "tests/test_p0_local.py::test_login_rate_limit_is_shared_and_returns_retry_after",
                             ]

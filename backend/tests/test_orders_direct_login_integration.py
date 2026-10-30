@@ -167,6 +167,44 @@ def test_existing_mirror_keeps_operational_id_and_history_when_hub_profile_chang
     assert _db().orders.count_documents({"restaurant_id": identity["restaurant_id"], "created_by": local_id}) == 1
 
 
+def test_direct_login_refresh_preserves_a_valid_pedidos_custom_role_for_waiter():
+    email = f"custom-role-{uuid.uuid4().hex}@example.com"
+    identity = _identity(email, role="waiter")
+    _configure(email, identity)
+    first = _login(email)
+    assert first.status_code == 200, first.text
+    local_id = first.json()["user"]["id"]
+    custom_role = {
+        "id": str(uuid.uuid4()),
+        "restaurant_id": identity["restaurant_id"],
+        "name": "Atendimento limitado",
+        "name_key": "atendimento limitado",
+        "permissions": ["orders.view", "service.view"],
+    }
+    _db().custom_roles.insert_one(custom_role)
+    assigned = requests.put(
+        f"{API}/internal/hub/users/{identity['user_id']}/custom-role/v1",
+        json={"tenant_id": identity["restaurant_id"], "custom_role_id": custom_role["id"]},
+        headers={"X-Module-Key": os.environ["MODULE_API_KEY"]}, timeout=10,
+    )
+    assert assigned.status_code == 200, assigned.text
+
+    # Existing Pedidos sessions load the authoritative user document on each
+    # request, so an operational role change takes effect without minting a
+    # second session or retaining the old permission set.
+    current = requests.get(
+        f"{API}/auth/me", headers={"Authorization": f"Bearer {first.json()['token']}"}, timeout=10,
+    )
+    assert current.status_code == 200, current.text
+    assert current.json()["permissions"] == custom_role["permissions"]
+
+    refreshed = _login(email)
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["user"]["id"] == local_id
+    assert refreshed.json()["user"]["custom_role_id"] == custom_role["id"]
+    assert _db().users.find_one({"id": local_id})["custom_role_id"] == custom_role["id"]
+
+
 def test_legacy_email_collision_is_never_adopted_as_a_hub_identity():
     email = f"legacy-{uuid.uuid4().hex}@example.com"
     legacy_id = uuid.uuid4().hex
