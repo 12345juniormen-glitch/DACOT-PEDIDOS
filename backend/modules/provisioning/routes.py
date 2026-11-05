@@ -52,6 +52,25 @@ class CustomRoleAssignmentInput(BaseModel):
     custom_role_id: str | None = Field(default=None, min_length=1, max_length=64)
 
 
+class HubTeamMemberOut(BaseModel):
+    """Safe, read-only operational snapshot consumed by the HUB portal."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    hub_user_id: str | None = None
+    name: str
+    role: Literal["admin", "manager", "waiter", "kitchen"]
+    custom_role_name: str | None = None
+    status: Literal["active", "inactive"]
+
+
+class HubTeamOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    module: Literal["orders"] = "orders"
+    team: list[HubTeamMemberOut]
+
+
 def _authorize(provided: str) -> None:
     expected = module_api_key()
     if not provided or not secrets.compare_digest(provided, expected):
@@ -119,6 +138,47 @@ async def _custom_role(db, tenant_id: str, custom_role_id: str | None) -> dict |
 
 def _custom_role_out(role: dict | None) -> dict | None:
     return None if role is None else {"id": role["id"], "name": role["name"]}
+
+
+@router.get("/team/v1", response_model=HubTeamOut)
+async def list_hub_team(
+    tenant_id: str = Query(min_length=24, max_length=24),
+    x_module_key: str = Header(default=""),
+):
+    """Return a tenant-scoped, non-sensitive operational team snapshot.
+
+    This contract is intentionally read-only. It never exposes e-mail,
+    credentials, permissions, local identifiers, or any cross-tenant record.
+    The caller is the HUB backend; browser clients cannot authenticate here.
+    """
+    _authorize(x_module_key)
+    tenant_id = _tenant_id(tenant_id)
+    db = get_db()
+    await _hub_restaurant(db, tenant_id)
+
+    users = await db.users.find(
+        {"restaurant_id": tenant_id},
+        {"_id": 0, "hub_user_id": 1, "name": 1, "role": 1,
+         "custom_role_id": 1, "active": 1},
+    ).sort("name", 1).to_list(500)
+    custom_role_ids = {
+        user["custom_role_id"] for user in users
+        if isinstance(user.get("custom_role_id"), str) and user["custom_role_id"]
+    }
+    custom_roles = await db.custom_roles.find(
+        {"restaurant_id": tenant_id, "id": {"$in": list(custom_role_ids)}},
+        {"_id": 0, "id": 1, "name": 1},
+    ).to_list(500) if custom_role_ids else []
+    role_names = {role["id"]: role["name"] for role in custom_roles}
+
+    valid_roles = {"admin", "manager", "waiter", "kitchen"}
+    return HubTeamOut(team=[HubTeamMemberOut(
+        hub_user_id=str(user["hub_user_id"]) if user.get("hub_user_id") else None,
+        name=str(user.get("name") or ""),
+        role=user.get("role") if user.get("role") in valid_roles else "waiter",
+        custom_role_name=role_names.get(user.get("custom_role_id")),
+        status="active" if user.get("active", True) else "inactive",
+    ) for user in users])
 
 
 @router.post("/provision")
