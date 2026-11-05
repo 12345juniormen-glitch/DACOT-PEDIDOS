@@ -87,6 +87,48 @@ def _custom_role_url(hub_user_id: str):
     return f"{API}/internal/hub/users/{hub_user_id}/custom-role/v1"
 
 
+def _team_url():
+    return f"{API}/internal/hub/team/v1"
+
+
+def test_team_snapshot_requires_service_authentication_and_is_tenant_scoped():
+    tenant_a, tenant_b = _tenant_id(), _tenant_id()
+    _seed_restaurant(tenant_a)
+    _seed_restaurant(tenant_b)
+    active = _seed_hub_user(tenant_a)
+    inactive = _seed_hub_user(tenant_a)
+    other = _seed_hub_user(tenant_b)
+    role = _seed_custom_role(tenant_a)
+    _db().users.update_one(
+        {"id": active["id"]},
+        {"$set": {"custom_role_id": role["id"]}},
+    )
+    _db().users.update_one({"id": inactive["id"]}, {"$set": {"active": False}})
+
+    for headers in ({}, {"X-Module-Key": "invalid"}):
+        denied = requests.get(_team_url(), params={"tenant_id": tenant_a}, headers=headers, timeout=10)
+        assert denied.status_code == 401
+
+    result = requests.get(
+        _team_url(), params={"tenant_id": tenant_a}, headers=_key_headers(), timeout=10,
+    )
+    assert result.status_code == 200, result.text
+    payload = result.json()
+    assert set(payload) == {"module", "team"}
+    assert payload["module"] == "orders"
+    assert {member["hub_user_id"] for member in payload["team"]} == {
+        active["hub_user_id"], inactive["hub_user_id"],
+    }
+    active_out = next(member for member in payload["team"] if member["hub_user_id"] == active["hub_user_id"])
+    inactive_out = next(member for member in payload["team"] if member["hub_user_id"] == inactive["hub_user_id"])
+    assert active_out["custom_role_name"] == role["name"]
+    assert inactive_out["status"] == "inactive"
+    assert all(set(member) == {"hub_user_id", "name", "role", "custom_role_name", "status"}
+               for member in payload["team"])
+    assert other["email"] not in result.text
+    assert "permissions" not in result.text
+
+
 def test_custom_role_contract_requires_service_authentication_and_scopes_every_tenant():
     tenant_a, tenant_b = _tenant_id(), _tenant_id()
     _seed_restaurant(tenant_a)
