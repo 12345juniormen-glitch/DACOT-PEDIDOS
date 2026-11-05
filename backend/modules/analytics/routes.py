@@ -14,7 +14,8 @@ from core.db import get_db
 
 
 ANALYTICS_AUDIENCE = "dacot-orders-analytics"
-ANALYTICS_SCOPE = "analytics.revenue"
+ANALYTICS_REVENUE_SCOPE = "analytics.revenue"
+ANALYTICS_SUMMARY_SCOPE = "analytics.summary"
 ANALYTICS_MODULE = "orders"
 RESTAURANT_TZ = ZoneInfo("America/Sao_Paulo")
 
@@ -25,7 +26,7 @@ def _fail(detail: str, status_code: int = 401) -> None:
     raise HTTPException(status_code=status_code, detail=f"Assertion de analytics inválida: {detail}")
 
 
-def _decode_assertion(authorization: str | None) -> str:
+def _decode_assertion(authorization: str | None, expected_scope: str) -> str:
     if not authorization or not authorization.startswith("Bearer "):
         _fail("ausente")
     token = authorization[7:].strip()
@@ -54,7 +55,7 @@ def _decode_assertion(authorization: str | None) -> str:
     restaurant_id = str(claims.get("restaurant_id", ""))
     if len(restaurant_id) != 24 or any(char not in "0123456789abcdefABCDEF" for char in restaurant_id):
         _fail("restaurant_id inválido")
-    if claims.get("module") != ANALYTICS_MODULE or claims.get("scope") != ANALYTICS_SCOPE:
+    if claims.get("module") != ANALYTICS_MODULE or claims.get("scope") != expected_scope:
         _fail("escopo inválido")
     if not isinstance(claims.get("jti"), str) or not claims["jti"].strip():
         _fail("jti inválido")
@@ -76,9 +77,30 @@ def _period_bounds() -> tuple[str, str, str, str]:
     return tuple(value.astimezone(timezone.utc).isoformat() for value in (today_start, next_day, month_start, next_month))
 
 
+def _daily_bounds(days: int = 7) -> list[tuple[str, str, str]]:
+    """Return recent operational days, oldest first, in the restaurant timezone."""
+    today = datetime.now(RESTAURANT_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+    result = []
+    for offset in range(days - 1, -1, -1):
+        start = today - timedelta(days=offset)
+        end = start + timedelta(days=1)
+        result.append((start.date().isoformat(), start.astimezone(timezone.utc).isoformat(), end.astimezone(timezone.utc).isoformat()))
+    return result
+
+
+def _aggregate_value(rows: list[dict]) -> dict:
+    """Normalize an aggregate so absence of orders is explicit and non-fabricated."""
+    if not rows:
+        return {"revenue_cents": 0, "orders_count": 0}
+    return {
+        "revenue_cents": int(rows[0].get("revenue_cents", 0)),
+        "orders_count": int(rows[0].get("orders_count", 0)),
+    }
+
+
 @router.get("/revenue")
 async def revenue(response: Response, authorization: str | None = Header(default=None)):
-    restaurant_id = _decode_assertion(authorization)
+    restaurant_id = _decode_assertion(authorization, ANALYTICS_REVENUE_SCOPE)
     today_start, today_end, month_start, month_end = _period_bounds()
     pipeline = [
         {"$match": {
@@ -104,6 +126,72 @@ async def revenue(response: Response, authorization: str | None = Header(default
     return {
         "today_cents": today,
         "current_month_cents": current_month,
+        "currency": "BRL",
+        "timezone": str(RESTAURANT_TZ),
+    }
+
+
+@router.get("/summary")
+async def summary(response: Response, authorization: str | None = Header(default=None)):
+    """Tenant-scoped operational summary for the Hub owner portal.
+
+    All financial figures are delivered-order revenue.  Open orders are a
+    current operational count, not a financial projection.  The Hub receives
+    aggregates only and cannot select a restaurant through request input.
+    """
+    restaurant_id = _decode_assertion(authorization, ANALYTICS_SUMMARY_SCOPE)
+    days = _daily_bounds()
+    today_start, today_end, month_start, month_end = _period_bounds()
+    yesterday_start, yesterday_end = days[-2][1:]
+    facets = {
+        "today": [
+            {"$match": {"status": "delivered", "delivered_at": {"$gte": today_start, "$lt": today_end}}},
+            {"$group": {"_id": None, "revenue_cents": {"$sum": "$total_cents"}, "orders_count": {"$sum": 1}}},
+        ],
+        "previous_day": [
+            {"$match": {"status": "delivered", "delivered_at": {"$gte": yesterday_start, "$lt": yesterday_end}}},
+            {"$group": {"_id": None, "revenue_cents": {"$sum": "$total_cents"}, "orders_count": {"$sum": 1}}},
+        ],
+        "month": [
+            {"$match": {"status": "delivered", "delivered_at": {"$gte": month_start, "$lt": month_end}}},
+            {"$group": {"_id": None, "revenue_cents": {"$sum": "$total_cents"}, "orders_count": {"$sum": 1}}},
+        ],
+        "open_orders": [
+            {"$match": {"status": {"$in": ["new", "in_preparation", "ready"]}}},
+            {"$count": "count"},
+        ],
+    }
+    for index, (_, start, end) in enumerate(days):
+        facets[f"day_{index}"] = [
+            {"$match": {"status": "delivered", "delivered_at": {"$gte": start, "$lt": end}}},
+            {"$group": {"_id": None, "revenue_cents": {"$sum": "$total_cents"}, "orders_count": {"$sum": 1}}},
+        ]
+    rows = await get_db().orders.aggregate([
+        {"$match": {"restaurant_id": restaurant_id}},
+        {"$facet": facets},
+    ]).to_list(1)
+    aggregates = rows[0] if rows else {}
+    today = _aggregate_value(aggregates.get("today", []))
+    previous_day = _aggregate_value(aggregates.get("previous_day", []))
+    month = _aggregate_value(aggregates.get("month", []))
+    comparison = None
+    if previous_day["revenue_cents"] > 0:
+        comparison = round(((today["revenue_cents"] - previous_day["revenue_cents"]) / previous_day["revenue_cents"]) * 100, 1)
+    series = []
+    for index, (day, _, _) in enumerate(days):
+        series.append({"date": day, **_aggregate_value(aggregates.get(f"day_{index}", []))})
+    open_rows = aggregates.get("open_orders", [])
+    open_orders = int(open_rows[0]["count"]) if open_rows else 0
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "today": {
+            **today,
+            "average_ticket_cents": (round(today["revenue_cents"] / today["orders_count"]) if today["orders_count"] else None),
+        },
+        "month": month,
+        "comparison": {"period": "previous_day", "revenue_change_percent": comparison},
+        "series": series,
+        "operations": {"open_orders": open_orders},
         "currency": "BRL",
         "timezone": str(RESTAURANT_TZ),
     }
