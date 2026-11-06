@@ -6,15 +6,18 @@ from datetime import datetime, timezone
 
 from core.db import get_db
 from core.security import hash_password
+from core.user_manager_guard import is_active_user_manager, register_user_manager
 
 
 async def seed_admin_and_restaurant() -> None:
     enabled = os.environ.get("ENABLE_LOCAL_BOOTSTRAP", "").strip().lower() in {"1", "true", "yes", "on"}
     if os.environ.get("APP_ENV", "production").strip().lower() == "production" or not enabled:
         return
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+    if not admin_password or not admin_password.strip():
+        raise RuntimeError("ADMIN_PASSWORD deve estar configurada para habilitar o bootstrap local")
     db = get_db()
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@dacot.local").lower()
-    admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
     restaurant_name = os.environ.get("DEFAULT_RESTAURANT_NAME", "Restaurante Demo")
 
     # Restaurant
@@ -48,12 +51,16 @@ async def seed_admin_and_restaurant() -> None:
             updates["restaurant_id"] = restaurant_id
         if updates:
             await db.users.update_one({"email": admin_email}, {"$set": updates})
+    seeded_user = await db.users.find_one({"email": admin_email}, {"_id": 0})
+    if is_active_user_manager(seeded_user):
+        await register_user_manager(db, restaurant_id, seeded_user["id"])
 
 
 async def ensure_indexes() -> None:
     db = get_db()
     await db.users.create_index("email", unique=True)
     await db.users.create_index("id", unique=True)
+    await db.user_manager_guards.create_index("restaurant_id", unique=True)
     await db.users.create_index(
         [("restaurant_id", 1), ("hub_user_id", 1)],
         unique=True,

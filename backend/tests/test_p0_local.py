@@ -1,10 +1,12 @@
 """P0 regressions; intentionally runnable only by the isolated local runner."""
 
 import asyncio
+import importlib.util
 import os
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import jwt
@@ -12,9 +14,12 @@ import pytest
 import requests
 from fastapi import HTTPException
 from pymongo import MongoClient
+from motor.motor_asyncio import AsyncIOMotorClient
 
 from core.security import hash_password, verify_password
 from core.db import get_db
+from core.user_manager_guard import unregister_user_manager
+from modules.auth import seed as auth_seed
 from modules.auth.seed import seed_admin_and_restaurant
 from modules.orders import routes as order_routes
 from modules.orders.routes import OrderStatusInput
@@ -125,12 +130,20 @@ def test_local_bootstrap_is_opt_in_and_never_runs_in_production(monkeypatch):
     asyncio.run(seed_admin_and_restaurant())
     with MongoClient(os.environ["MONGO_URL"]) as client:
         assert client[os.environ["DB_NAME"]].users.find_one({"email": email}) is None
-
     monkeypatch.setenv("ENABLE_LOCAL_BOOTSTRAP", "true")
     monkeypatch.setenv("APP_ENV", "production")
     asyncio.run(seed_admin_and_restaurant())
     with MongoClient(os.environ["MONGO_URL"]) as client:
         assert client[os.environ["DB_NAME"]].users.find_one({"email": email}) is None
+
+
+def test_local_bootstrap_requires_explicit_password(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("ENABLE_LOCAL_BOOTSTRAP", "true")
+    monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
+    monkeypatch.setattr(auth_seed, "get_db", lambda: pytest.fail("bootstrap não deve tocar o banco sem senha"))
+    with pytest.raises(RuntimeError, match="ADMIN_PASSWORD"):
+        asyncio.run(seed_admin_and_restaurant())
 
 
 def test_production_handoff_configuration_fails_closed(monkeypatch):
@@ -174,6 +187,15 @@ def test_hub_handoff_role_downgrade_replaces_local_permissions():
     first = exchange("admin", 1)
     assert first.status_code == 200, first.text[:200]
     local_user_id = first.json()["user"]["id"]
+    second_admin = requests.post(f"{API}/users", headers={
+        "Authorization": f"Bearer {first.json()['token']}"
+    }, timeout=20, json={
+        "name": "Second Hub tenant admin",
+        "email": f"second-{uuid.uuid4().hex}@example.com",
+        "temp_password": "second-admin-password",
+        "role": "admin",
+    })
+    assert second_admin.status_code == 201, second_admin.text[:200]
     custom_role_id = uuid.uuid4().hex
     with MongoClient(os.environ["MONGO_URL"]) as client:
         client[os.environ["DB_NAME"]].users.update_one(
@@ -319,6 +341,192 @@ def test_custom_permissions_and_optional_password_change():
               "permissions": ["users.view"]},
     )
     assert protected.status_code == 409
+
+
+def test_users_manage_cannot_grant_unheld_permissions_or_self_elevate():
+    tenant_id = uuid.uuid4().hex[:24]
+    now = int(time.time())
+    handoff = jwt.encode({
+        "sub": f"tenant_user:{uuid.uuid4().hex}", "restaurant_id": tenant_id,
+        "role": "admin", "module": "orders", "iss": os.environ["HANDOFF_ISSUER"],
+        "aud": os.environ["HANDOFF_AUDIENCE"], "iat": now, "nbf": now - 5,
+        "exp": now + 60, "jti": uuid.uuid4().hex, "handoff_version": 1,
+        "hub_access": {"user": 1, "tenant": 1, "module": 1},
+    }, os.environ["HANDOFF_JWT_SECRET"], algorithm="HS256")
+    admin = requests.post(f"{API}/session/exchange", json={"handoff": handoff}, timeout=20)
+    assert admin.status_code == 200, admin.text[:200]
+    admin_headers = {"Authorization": f"Bearer {admin.json()['token']}"}
+
+    limited = requests.post(f"{API}/users", headers=admin_headers, timeout=20, json={
+        "name": "Limited user manager", "email": f"limited-{uuid.uuid4().hex}@example.com",
+        "temp_password": "limited-manager-password", "role": "waiter",
+        "permissions": ["users.manage", "dashboard.view"],
+    })
+    assert limited.status_code == 201, limited.text[:200]
+    login = requests.post(f"{API}/auth/login", timeout=20, json={
+        "email": limited.json()["email"], "password": "limited-manager-password",
+    })
+    assert login.status_code == 200, login.text[:200]
+    limited_headers = {"Authorization": f"Bearer {login.json()['token']}"}
+
+    target = requests.post(f"{API}/users", headers=admin_headers, timeout=20, json={
+        "name": "Limited target", "email": f"target-{uuid.uuid4().hex}@example.com",
+        "temp_password": "target-user-password", "role": "kitchen",
+        "permissions": ["dashboard.view"],
+    })
+    assert target.status_code == 201, target.text[:200]
+
+    self_escalation = requests.put(
+        f"{API}/users/{limited.json()['id']}", headers=limited_headers, timeout=20,
+        json={"name": "Limited user manager", "role": "waiter", "active": True,
+              "permissions": ["users.manage", "dashboard.view", "orders.create"]},
+    )
+    assert self_escalation.status_code == 403
+
+    grant_to_other = requests.put(
+        f"{API}/users/{target.json()['id']}", headers=limited_headers, timeout=20,
+        json={"name": "Limited target", "role": "kitchen", "active": True,
+              "permissions": ["products.manage"]},
+    )
+    assert grant_to_other.status_code == 403
+
+    create_admin = requests.post(f"{API}/users", headers=limited_headers, timeout=20, json={
+        "name": "Unauthorized admin", "email": f"blocked-admin-{uuid.uuid4().hex}@example.com",
+        "temp_password": "blocked-admin-password", "role": "admin",
+    })
+    assert create_admin.status_code == 403
+
+    promote_other_to_admin = requests.put(
+        f"{API}/users/{target.json()['id']}", headers=limited_headers, timeout=20,
+        json={"name": "Limited target", "role": "admin", "active": True,
+              "permissions": ["dashboard.view"]},
+    )
+    assert promote_other_to_admin.status_code == 403
+
+    create_custom_role = requests.post(
+        f"{API}/users/custom-roles", headers=limited_headers, timeout=20,
+        json={"name": "Unauthorized role", "permissions": ["orders.create"]},
+    )
+    assert create_custom_role.status_code == 403
+
+    create_default_waiter = requests.post(f"{API}/users", headers=limited_headers, timeout=20, json={
+        "name": "Unauthorized preset", "email": f"blocked-preset-{uuid.uuid4().hex}@example.com",
+        "temp_password": "blocked-preset-password", "role": "waiter",
+    })
+    assert create_default_waiter.status_code == 403
+
+    allowed = requests.put(
+        f"{API}/users/{target.json()['id']}", headers=limited_headers, timeout=20,
+        json={"name": "Limited target", "role": "kitchen", "active": True,
+              "permissions": ["dashboard.view"]},
+    )
+    assert allowed.status_code == 200, allowed.text[:200]
+
+    legitimate_admin = requests.post(f"{API}/users", headers=admin_headers, timeout=20, json={
+        "name": "Admin-created admin", "email": f"allowed-admin-{uuid.uuid4().hex}@example.com",
+        "temp_password": "allowed-admin-password", "role": "admin",
+    })
+    assert legitimate_admin.status_code == 201, legitimate_admin.text[:200]
+
+
+def test_last_user_manager_guard_is_atomic_under_concurrency():
+    restaurant_id = uuid.uuid4().hex[:24]
+    manager_ids = [uuid.uuid4().hex for _ in range(2)]
+
+    async def exercise():
+        client = AsyncIOMotorClient(os.environ["MONGO_URL"])
+        try:
+            db = client[os.environ["DB_NAME"]]
+            await db.user_manager_guards.insert_one({
+                "restaurant_id": restaurant_id, "manager_ids": manager_ids,
+            })
+
+            async def remove(user_id):
+                try:
+                    await unregister_user_manager(db, restaurant_id, user_id)
+                    return "removed"
+                except HTTPException as exc:
+                    return exc.status_code
+
+            results = await asyncio.gather(*(remove(user_id) for user_id in manager_ids))
+            guard = await db.user_manager_guards.find_one({"restaurant_id": restaurant_id})
+            return results, guard
+        finally:
+            client.close()
+
+    results, guard = asyncio.run(exercise())
+    assert results.count("removed") == 1
+    assert results.count(409) == 1
+    assert len(guard["manager_ids"]) == 1
+
+
+def test_last_manager_can_only_be_removed_after_another_manager_exists():
+    tenant_id = uuid.uuid4().hex[:24]
+    now = int(time.time())
+
+    def admin_session():
+        handoff = jwt.encode({
+            "sub": f"tenant_user:{uuid.uuid4().hex}", "restaurant_id": tenant_id,
+            "role": "admin", "module": "orders", "iss": os.environ["HANDOFF_ISSUER"],
+            "aud": os.environ["HANDOFF_AUDIENCE"], "iat": now, "nbf": now - 5,
+            "exp": now + 60, "jti": uuid.uuid4().hex, "handoff_version": 1,
+            "hub_access": {"user": 1, "tenant": 1, "module": 1},
+        }, os.environ["HANDOFF_JWT_SECRET"], algorithm="HS256")
+        response = requests.post(f"{API}/session/exchange", json={"handoff": handoff}, timeout=20)
+        assert response.status_code == 200, response.text[:200]
+        return {"Authorization": f"Bearer {response.json()['token']}"}, response.json()["user"]["id"]
+
+    first_headers, first_id = admin_session()
+    second = requests.post(f"{API}/users", headers=first_headers, timeout=20, json={
+        "name": "Second manager", "email": f"second-manager-{uuid.uuid4().hex}@example.com",
+        "temp_password": "second-manager-password", "role": "admin",
+    })
+    assert second.status_code == 201, second.text[:200]
+    second_id = second.json()["id"]
+
+    demote_first = requests.put(f"{API}/users/{first_id}", headers=first_headers, timeout=20, json={
+        "name": "First admin", "role": "waiter", "active": True,
+        "permissions": ["dashboard.view"],
+    })
+    assert demote_first.status_code == 200, demote_first.text[:200]
+
+    second_login = requests.post(f"{API}/auth/login", timeout=20, json={
+        "email": second.json()["email"], "password": "second-manager-password",
+    })
+    assert second_login.status_code == 200, second_login.text[:200]
+    second_headers = {"Authorization": f"Bearer {second_login.json()['token']}"}
+    demote_last = requests.put(f"{API}/users/{second_id}", headers=second_headers, timeout=20, json={
+        "name": "Second manager", "role": "waiter", "active": True,
+        "permissions": ["dashboard.view"],
+    })
+    assert demote_last.status_code == 409
+
+
+def test_security_posture_tool_never_prints_password_hashes(capsys):
+    script_path = Path(__file__).with_name("security_posture_check.py")
+    spec = importlib.util.spec_from_file_location("security_posture_check_test", script_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    class Users:
+        async def find_one(self, query, projection):
+            assert projection == {"_id": 1}
+            return {"_id": "credential-marker"}
+
+    class HandoffJtis:
+        async def count_documents(self, query):
+            return 2
+
+    class FakeDb:
+        users = Users()
+        handoff_jtis = HandoffJtis()
+
+    asyncio.run(module.check_credential_records(FakeDb(), "admin@example.test"))
+    output = capsys.readouterr().out
+    assert "admin=present" in output
+    assert "handoff_user=present" in output
+    assert "password_hash" not in output
+    assert "credential-marker" not in output
 
 
 def test_custom_roles_are_tenant_scoped_and_safe_to_edit_or_delete():

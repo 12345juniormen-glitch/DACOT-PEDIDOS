@@ -13,6 +13,12 @@ from pymongo.errors import DuplicateKeyError
 from core.db import get_db
 from core.hub_access import module_api_key
 from core.permissions import permissions_for_role
+from core.user_manager_guard import (
+    finish_user_manager_change,
+    is_active_user_manager,
+    prepare_user_manager_change,
+    register_user_manager,
+)
 
 
 router = APIRouter(prefix="/internal/hub", tags=["internal provisioning"])
@@ -72,6 +78,10 @@ async def provision(payload: ProvisionInput, x_module_key: str = Header(default=
 
     preset = permissions_for_role(payload.role)
     if user:
+        next_user = {**user, "role": payload.role, "permissions": preset, "active": True}
+        manager_transition = await prepare_user_manager_change(
+            db, payload.tenant_id, user["id"], user, next_user
+        )
         await db.users.update_one(
             {"id": user["id"], "restaurant_id": payload.tenant_id},
             {"$set": {
@@ -80,6 +90,9 @@ async def provision(payload: ProvisionInput, x_module_key: str = Header(default=
                 "updated_at": now,
             }, "$unset": {"custom_role_id": ""}},
         )
+        await finish_user_manager_change(db, payload.tenant_id, user["id"], manager_transition)
+        if is_active_user_manager(next_user):
+            await register_user_manager(db, payload.tenant_id, user["id"])
         user_id = user["id"]
         created = False
     else:
@@ -95,6 +108,8 @@ async def provision(payload: ProvisionInput, x_module_key: str = Header(default=
             })
         except DuplicateKeyError:
             raise HTTPException(409, "Conflito ao provisionar usuário")
+        if is_active_user_manager({"role": payload.role, "permissions": preset, "active": True}):
+            await register_user_manager(db, payload.tenant_id, user_id)
         created = True
     stored = await db.users.find_one({"id": user_id, "restaurant_id": payload.tenant_id})
     invite_token = None

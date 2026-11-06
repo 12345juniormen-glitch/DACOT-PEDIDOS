@@ -251,12 +251,20 @@ def main():
                 selected = (["tests/backend_test.py", "tests/test_contact_import.py", "tests/test_p0_local.py", "tests/test_handoff_concurrency.py", "tests/test_order_history_audit.py", "tests/test_whatsapp.py", "tests/test_analytics_revenue.py"]
                             if args.all else ["tests/test_handoff_concurrency.py"] if args.handoff_only
                             else [
+                                "tests/backend_test.py::TestRoleEscalation",
+                                "tests/backend_test.py::TestAuthenticatedTenantBinding",
+                                "tests/backend_test.py::TestCrossTenantIsolation",
                                 "tests/test_p0_local.py::test_admin_seed_does_not_replace_changed_password",
                                 "tests/test_p0_local.py::test_local_bootstrap_is_opt_in_and_never_runs_in_production",
+                                "tests/test_p0_local.py::test_local_bootstrap_requires_explicit_password",
                                 "tests/test_p0_local.py::test_production_handoff_configuration_fails_closed",
                                 "tests/test_p0_local.py::test_hub_handoff_role_downgrade_replaces_local_permissions",
                                 "tests/test_p0_local.py::test_custom_permissions_and_optional_password_change",
                                 "tests/test_p0_local.py::test_custom_roles_are_tenant_scoped_and_safe_to_edit_or_delete",
+                                "tests/test_p0_local.py::test_users_manage_cannot_grant_unheld_permissions_or_self_elevate",
+                                "tests/test_p0_local.py::test_last_user_manager_guard_is_atomic_under_concurrency",
+                                "tests/test_p0_local.py::test_last_manager_can_only_be_removed_after_another_manager_exists",
+                                "tests/test_p0_local.py::test_security_posture_tool_never_prints_password_hashes",
                             ] if args.permissions_only
                             else ["tests/test_whatsapp.py"] if args.whatsapp_only
                             else [

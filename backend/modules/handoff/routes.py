@@ -22,6 +22,12 @@ from core.db import get_db
 from core.security import create_access_token
 from core.hub_access import check_hub_access, validate_context
 from core.permissions import effective_permissions, permissions_for_role
+from core.user_manager_guard import (
+    finish_user_manager_change,
+    is_active_user_manager,
+    prepare_user_manager_change,
+    register_user_manager,
+)
 
 
 ALLOWED_MODULE_IDS = {"orders", "pedidos"}
@@ -184,23 +190,35 @@ async def _find_or_create_user(restaurant_id: str, hub_user_id: str, role: str) 
             # Hub identities always use the Hub role preset. Local overrides
             # must not survive a role reduction performed in the Hub.
             preset = permissions_for_role(role)
+            next_user = {**u, "role": role, "active": True, "permissions": preset}
+            manager_transition = await prepare_user_manager_change(
+                db, restaurant_id, u["id"], u, next_user
+            )
             await db.users.update_one(
                 {"id": u["id"], "restaurant_id": restaurant_id},
                 {"$set": {"role": role, "active": True, "permissions": preset,
                           "updated_at": now},
                  "$unset": {"custom_role_id": ""}},
             )
+            await finish_user_manager_change(db, restaurant_id, u["id"], manager_transition)
             u["role"] = role
             u["active"] = True
             u["permissions"] = preset
             u.pop("custom_role_id", None)
         elif u.get("role") != role or not u.get("active", True):
+            next_user = {**u, "role": role, "active": True}
+            manager_transition = await prepare_user_manager_change(
+                db, restaurant_id, u["id"], u, next_user
+            )
             await db.users.update_one(
                 {"id": u["id"], "restaurant_id": restaurant_id},
                 {"$set": {"role": role, "active": True, "updated_at": now}},
             )
+            await finish_user_manager_change(db, restaurant_id, u["id"], manager_transition)
             u["role"] = role
             u["active"] = True
+        if is_active_user_manager(u):
+            await register_user_manager(db, restaurant_id, u["id"])
         u.pop("_id", None)
         u.pop("password_hash", None)
         return u
@@ -228,10 +246,14 @@ async def _find_or_create_user(restaurant_id: str, hub_user_id: str, role: str) 
         # Race: someone just created it. Re-fetch.
         u = await db.users.find_one({"restaurant_id": restaurant_id, "hub_user_id": hub_user_id})
         if u:
+            if is_active_user_manager(u):
+                await register_user_manager(db, restaurant_id, u["id"])
             u.pop("_id", None)
             u.pop("password_hash", None)
             return u
         raise
+    if is_active_user_manager(doc):
+        await register_user_manager(db, restaurant_id, doc["id"])
     doc.pop("password_hash", None)
     return doc
 

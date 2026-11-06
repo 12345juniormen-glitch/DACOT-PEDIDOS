@@ -6,17 +6,32 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 be = dotenv_values("/app/backend/.env")
 fe = dotenv_values("/app/frontend/.env")
-API = fe["REACT_APP_BACKEND_URL"].rstrip("/") + "/api"
+API = fe.get("REACT_APP_BACKEND_URL", "").rstrip("/") + "/api"
 
 
-async def check_hash():
-    c = AsyncIOMotorClient(be["MONGO_URL"])
-    db = c[be["DB_NAME"]]
-    u = await db.users.find_one({"email": be["ADMIN_EMAIL"].lower()})
-    print("admin hash prefix:", u["password_hash"][:7], "len", len(u["password_hash"]))
-    hu = await db.users.find_one({"provisioned_by": "hub_handoff"})
-    print("handoff user password_hash repr:", repr(hu.get("password_hash")))
+def format_credential_status(admin_exists: bool, handoff_user_exists: bool) -> str:
+    return (
+        "Credential records: "
+        f"admin={'present' if admin_exists else 'missing'}, "
+        f"handoff_user={'present' if handoff_user_exists else 'missing'}"
+    )
+
+
+async def check_credential_records(db=None, admin_email: str | None = None):
+    client = None
+    if db is None:
+        client = AsyncIOMotorClient(be["MONGO_URL"])
+        db = client[be["DB_NAME"]]
+    if admin_email is None:
+        admin_email = be["ADMIN_EMAIL"].lower()
+    admin = await db.users.find_one({"email": admin_email}, {"_id": 1})
+    handoff_user = await db.users.find_one(
+        {"provisioned_by": "hub_handoff"}, {"_id": 1}
+    )
+    print(format_credential_status(bool(admin), bool(handoff_user)))
     print("handoff jti count:", await db.handoff_jtis.count_documents({}))
+    if client is not None:
+        client.close()
 
 
 def check_bruteforce():
@@ -39,6 +54,6 @@ def check_cors():
 
 
 if __name__ == "__main__":
-    asyncio.run(check_hash())
+    asyncio.run(check_credential_records())
     check_bruteforce()
     check_cors()

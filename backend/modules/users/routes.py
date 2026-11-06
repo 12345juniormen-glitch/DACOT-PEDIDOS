@@ -10,13 +10,19 @@ from pymongo.errors import DuplicateKeyError
 from core.db import get_db
 from core.deps import Tenant, require_permissions
 from core.permissions import (
+    ALL_PERMISSIONS,
     PERMISSION_GROUPS,
     ROLE_PERMISSION_PRESETS,
     effective_permissions,
-    has_permission,
     validate_permissions,
 )
 from core.security import hash_password
+from core.user_manager_guard import (
+    finish_user_manager_change,
+    is_active_user_manager,
+    prepare_user_manager_change,
+    register_user_manager,
+)
 
 
 UserRole = Literal["admin", "manager", "waiter", "kitchen"]
@@ -144,22 +150,20 @@ async def _find_custom_role(db, restaurant_id: str, custom_role_id: str | None) 
     return role
 
 
-async def _count_active_user_managers(db, restaurant_id: str, exclude_user_id: str | None = None) -> int:
-    fallback_roles = [
-        role for role, permissions in ROLE_PERMISSION_PRESETS.items()
-        if "users.manage" in permissions
-    ]
-    q = {
-        "restaurant_id": restaurant_id,
-        "active": True,
-        "$or": [
-            {"permissions": "users.manage"},
-            {"permissions": None, "role": {"$in": fallback_roles}},
-        ],
-    }
-    if exclude_user_id:
-        q["id"] = {"$ne": exclude_user_id}
-    return await db.users.count_documents(q)
+def _permissions_to_grant(tenant: Tenant, permissions: list[str], role: str, custom_role: dict | None) -> None:
+    requested = set(permissions)
+    if not requested.issubset(tenant.permissions):
+        raise HTTPException(status_code=403, detail="Você não pode conceder permissões que não possui")
+    if role == "admin" and custom_role is None and not ALL_PERMISSIONS.issubset(tenant.permissions):
+        raise HTTPException(status_code=403, detail="Somente um administrador com autoridade equivalente pode atribuir o cargo Administrador")
+
+
+def _resolved_permissions(role: str, custom_role: dict | None, explicit: list[str] | None) -> list[str]:
+    if explicit is not None:
+        return validate_permissions(explicit)
+    if custom_role is not None:
+        return validate_permissions(custom_role.get("permissions", []))
+    return sorted(ROLE_PERMISSION_PRESETS[role])
 
 
 @router.get("/permissions")
@@ -183,13 +187,15 @@ async def create_custom_role(
     payload: CustomRoleInput,
     tenant: Tenant = Depends(require_permissions("users.manage")),
 ):
+    permissions = validate_permissions(payload.permissions)
+    _permissions_to_grant(tenant, permissions, "waiter", None)
     now = datetime.now(timezone.utc).isoformat()
     doc = {
         "id": str(uuid.uuid4()),
         "restaurant_id": tenant.restaurant_id,
         "name": payload.name,
         "name_key": payload.name.casefold(),
-        "permissions": validate_permissions(payload.permissions),
+        "permissions": permissions,
         "created_at": now,
         "updated_at": now,
     }
@@ -206,10 +212,12 @@ async def update_custom_role(
     payload: CustomRoleInput,
     tenant: Tenant = Depends(require_permissions("users.manage")),
 ):
+    permissions = validate_permissions(payload.permissions)
+    _permissions_to_grant(tenant, permissions, "waiter", None)
     updates = {
         "name": payload.name,
         "name_key": payload.name.casefold(),
-        "permissions": validate_permissions(payload.permissions),
+        "permissions": permissions,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
@@ -252,6 +260,11 @@ async def list_users(tenant: Tenant = Depends(require_permissions("users.view"))
 async def create_user(payload: UserCreateInput, tenant: Tenant = Depends(require_permissions("users.manage"))):
     db = get_db()
     custom_role = await _find_custom_role(db, tenant.restaurant_id, payload.custom_role_id)
+    permissions = _resolved_permissions(payload.role, custom_role, payload.permissions)
+    _permissions_to_grant(tenant, permissions, payload.role, custom_role)
+    stored_permissions = (
+        permissions if payload.permissions is not None or custom_role is not None else None
+    )
     email = payload.email.lower().strip()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=409, detail="Email já cadastrado")
@@ -264,16 +277,15 @@ async def create_user(payload: UserCreateInput, tenant: Tenant = Depends(require
         "name": payload.name.strip(),
         "role": "waiter" if custom_role else payload.role,
         "custom_role_id": custom_role["id"] if custom_role else None,
-        "permissions": (
-            validate_permissions(payload.permissions) if payload.permissions is not None
-            else list(custom_role["permissions"]) if custom_role else None
-        ),
+        "permissions": stored_permissions,
         "active": True,
         "must_change_password": payload.require_password_change,
         "created_at": now,
         "updated_at": now,
     }
     await db.users.insert_one(doc)
+    if is_active_user_manager(doc):
+        await register_user_manager(db, tenant.restaurant_id, doc["id"])
     return _to_out(doc)
 
 
@@ -292,37 +304,36 @@ async def update_user(
 
     custom_role = await _find_custom_role(db, tenant.restaurant_id, payload.custom_role_id)
     new_role = "waiter" if custom_role else payload.role
-    new_permissions = (
-        validate_permissions(payload.permissions) if payload.permissions is not None
-        else list(custom_role["permissions"]) if custom_role else None
+    new_permissions = _resolved_permissions(new_role, custom_role, payload.permissions)
+    _permissions_to_grant(tenant, new_permissions, new_role, custom_role)
+    stored_permissions = (
+        new_permissions if payload.permissions is not None or custom_role is not None else None
     )
-    losing_user_management = has_permission(existing, "users.manage") and (
-        not payload.active or "users.manage" not in (
-            new_permissions if new_permissions is not None else ROLE_PERMISSION_PRESETS[new_role]
-        )
-    )
-    if losing_user_management:
-        remaining = await _count_active_user_managers(db, tenant.restaurant_id, exclude_user_id=user_id)
-        if remaining == 0:
-            raise HTTPException(
-                status_code=409,
-                detail="Não é possível remover o último usuário ativo que gerencia usuários",
-            )
 
     updates = {
         "name": payload.name.strip(),
         "role": new_role,
         "custom_role_id": custom_role["id"] if custom_role else None,
-        "permissions": new_permissions,
+        "permissions": stored_permissions,
         "active": payload.active,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    transition = await prepare_user_manager_change(
+        db,
+        tenant.restaurant_id,
+        user_id,
+        existing,
+        {**existing, **updates},
+    )
     updated = await db.users.find_one_and_update(
         {"id": user_id, "restaurant_id": tenant.restaurant_id},
         {"$set": updates},
         return_document=True,
         projection={"_id": 0, "password_hash": 0},
     )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    await finish_user_manager_change(db, tenant.restaurant_id, user_id, transition)
     return _to_out(updated)
 
 
