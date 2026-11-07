@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { ChefHat, ReceiptText } from "lucide-react";
 import { api } from "../lib/api";
@@ -80,6 +80,7 @@ export default function OrderPrintControls({ order, restaurantId, fallbackRestau
   const [settingsLoading, setSettingsLoading] = useState(Boolean(restaurantId));
   const [paper, setPaper] = useState("80");
   const [printJob, setPrintJob] = useState(null);
+  const printingRef = useRef(false);
 
   useEffect(() => {
     let current = true;
@@ -112,18 +113,43 @@ export default function OrderPrintControls({ order, restaurantId, fallbackRestau
   }, [restaurantId]);
 
   useEffect(() => {
-    const clearPrintDocument = () => setPrintJob(null);
+    const clearPrintDocument = () => {
+      setPrintJob(null);
+      printingRef.current = false;
+    };
     window.addEventListener("afterprint", clearPrintDocument);
     return () => window.removeEventListener("afterprint", clearPrintDocument);
   }, []);
 
-  const print = (kind) => {
-    if (printJob) return;
+  const print = async (kind) => {
+    if (printingRef.current || printJob) return;
+    printingRef.current = true;
     flushSync(() => setPrintJob({ kind, paper }));
     try {
+      const logo = kind === "receipt"
+        ? document.querySelector("#dacot-print-root .print-logo")
+        : null;
+      if (logo) {
+        if (typeof logo.decode === "function") {
+          await logo.decode().catch(() => {});
+        } else if (!logo.complete) {
+          await new Promise((resolve) => {
+            const finish = () => {
+              window.clearTimeout(timeout);
+              logo.removeEventListener("load", finish);
+              logo.removeEventListener("error", finish);
+              resolve();
+            };
+            const timeout = window.setTimeout(finish, 1500);
+            logo.addEventListener("load", finish, { once: true });
+            logo.addEventListener("error", finish, { once: true });
+          });
+        }
+      }
       window.print();
     } catch (_) {
       flushSync(() => setPrintJob(null));
+      printingRef.current = false;
     }
   };
 

@@ -81,7 +81,15 @@ describe("OrderPrintControls", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
-    api.get.mockResolvedValue({ data: { name: "Brasa do Centro" } });
+    api.get.mockImplementation((path) => Promise.resolve({
+      data: path === "/restaurant/print-settings"
+        ? { preset: "classic", logo_data_url: "data:image/png;base64,dGVzdA==" }
+        : { name: "Brasa do Centro" },
+    }));
+    Object.defineProperty(window.HTMLImageElement.prototype, "decode", {
+      configurable: true,
+      value: jest.fn().mockResolvedValue(undefined),
+    });
     Object.defineProperty(window, "print", { configurable: true, value: jest.fn() });
   });
 
@@ -91,21 +99,42 @@ describe("OrderPrintControls", () => {
     jest.clearAllMocks();
   });
 
-  test("abre a impressão e permite reimprimir sem alterar o pedido", async () => {
+  test("aguarda a logo antes de imprimir e permite reimprimir sem alterar o pedido", async () => {
     await act(async () => {
       root.render(<OrderPrintControls order={order} restaurantId="restaurant-1" />);
     });
 
     const button = container.querySelector('[data-testid="print-receipt"]');
-    act(() => button.click());
+    await act(async () => { button.click(); });
+    expect(window.HTMLImageElement.prototype.decode).toHaveBeenCalledTimes(1);
     expect(window.print).toHaveBeenCalledTimes(1);
     expect(container.querySelector("#dacot-print-root").textContent).toContain(brl(61.3));
 
     act(() => window.dispatchEvent(new Event("afterprint")));
-    act(() => button.click());
+    await act(async () => { button.click(); });
     expect(window.print).toHaveBeenCalledTimes(2);
     expect(order.status).toBe("new");
     expect(order.total).toBe(61.3);
     expect(api.get).toHaveBeenCalledWith("/restaurant/current");
+  });
+
+  test("não abre a impressão até a logo terminar de decodificar", async () => {
+    let finishDecoding;
+    Object.defineProperty(window.HTMLImageElement.prototype, "decode", {
+      configurable: true,
+      value: jest.fn(() => new Promise((resolve) => { finishDecoding = resolve; })),
+    });
+
+    await act(async () => {
+      root.render(<OrderPrintControls order={order} restaurantId="restaurant-1" />);
+    });
+    const button = container.querySelector('[data-testid="print-receipt"]');
+    act(() => button.click());
+
+    expect(window.HTMLImageElement.prototype.decode).toHaveBeenCalledTimes(1);
+    expect(window.print).not.toHaveBeenCalled();
+
+    await act(async () => { finishDecoding(); });
+    expect(window.print).toHaveBeenCalledTimes(1);
   });
 });
