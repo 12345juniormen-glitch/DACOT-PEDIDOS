@@ -31,7 +31,8 @@ def _assertion(restaurant_id, **overrides):
 
 
 def _order(restaurant_id, cents, delivered_at, status="delivered"):
-    return {"id": uuid.uuid4().hex, "restaurant_id": restaurant_id, "total_cents": cents,
+    return {"id": uuid.uuid4().hex, "order_number": uuid.uuid4().int % 2_000_000_000,
+            "restaurant_id": restaurant_id, "total_cents": cents,
             "status": status, "delivered_at": delivered_at, "created_at": delivered_at, "updated_at": delivered_at}
 
 
@@ -54,3 +55,25 @@ def test_revenue_assertion_is_strict_and_aggregation_is_tenant_scoped():
                   _assertion(restaurant_a, exp=int(time.time()) - 1), _assertion(""),
                   jwt.encode({"bad": True}, "wrong", algorithm="HS256")):
         assert requests.get(endpoint, headers={"Authorization": f"Bearer {token}"}, timeout=20).status_code == 401
+
+
+def test_summary_is_tenant_scoped_and_requires_its_own_scope():
+    restaurant_a, restaurant_b = uuid.uuid4().hex[:24], uuid.uuid4().hex[:24]
+    local_now = datetime.now(ZoneInfo("America/Sao_Paulo"))
+    today = local_now.replace(hour=12, minute=0, second=0, microsecond=0).astimezone(timezone.utc).isoformat()
+    yesterday = (local_now - timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0).astimezone(timezone.utc).isoformat()
+    with MongoClient(os.environ["MONGO_URL"]) as client:
+        client[os.environ["DB_NAME"]].orders.insert_many([
+            _order(restaurant_a, 10_000, today), _order(restaurant_a, 4_000, yesterday),
+            _order(restaurant_a, 5_000, today, "in_preparation"), _order(restaurant_b, 90_000, today),
+        ])
+    endpoint = API + "/internal/analytics/summary"
+    token = _assertion(restaurant_a, scope="analytics.summary")
+    response = requests.get(endpoint, headers={"Authorization": f"Bearer {token}"}, timeout=20)
+    assert response.status_code == 200 and response.headers["Cache-Control"] == "no-store"
+    body = response.json()
+    assert body["today"] == {"revenue_cents": 10_000, "orders_count": 1, "average_ticket_cents": 10_000}
+    assert body["month"]["revenue_cents"] >= 10_000
+    assert body["operations"] == {"open_orders": 1}
+    assert len(body["series"]) == 7 and body["series"][-1]["revenue_cents"] == 10_000
+    assert requests.get(endpoint, headers={"Authorization": f"Bearer {_assertion(restaurant_a)}"}, timeout=20).status_code == 401
