@@ -15,6 +15,7 @@ import OrdersHistoryPage from "@/pages/OrdersHistoryPage";
 import ProductsPage from "@/pages/ProductsPage";
 import CustomersPage from "@/pages/CustomersPage";
 import UsersPage from "@/pages/UsersPage";
+import ReceiptSettingsPage from "@/pages/ReceiptSettingsPage";
 import ChangePasswordPage from "@/pages/ChangePasswordPage";
 import MyProfilePage from "@/pages/MyProfilePage";
 import KitchenPage from "@/pages/KitchenPage";
@@ -96,6 +97,7 @@ function App() {
             <Route path="/produtos" element={<Shell permission="products.view"><ProductsPage /></Shell>} />
             <Route path="/clientes" element={<Shell permission="customers.view"><CustomersPage /></Shell>} />
             <Route path="/usuarios" element={<Shell permission="users.view"><UsersPage /></Shell>} />
+            <Route path="/configuracoes" element={<Shell permission="users.manage"><ReceiptSettingsPage /></Shell>} />
             <Route path="/cozinha" element={<Shell permission="kds.view"><KitchenPage /></Shell>} />
             <Route path="/garcom" element={<Shell permission="service.view"><WaiterPage /></Shell>} />
             <Route path="/garcom/novo" element={<Shell permission={["service.view", "orders.create"]}><OrderCreatePage operational /></Shell>} />

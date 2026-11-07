@@ -12,7 +12,7 @@ function eyebrowFor(title) {
   if (/dashboard|pedido|pedidos|garçom|cozinha/.test(normalized)) return "OPERAÇÃO";
   if (/cliente|produto/.test(normalized)) return "CADASTROS";
   if (/whatsapp/.test(normalized)) return "ATENDIMENTO";
-  if (/usuário|perfil/.test(normalized)) return "ADMINISTRAÇÃO";
+  if (/usuário|perfil|comprovante|configura/.test(normalized)) return "ADMINISTRAÇÃO";
   return "MÓDULO DE PEDIDOS";
 }
 

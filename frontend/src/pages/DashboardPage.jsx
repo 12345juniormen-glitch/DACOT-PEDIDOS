@@ -179,45 +179,49 @@ export default function DashboardPage() {
                     {byStatus[col.key].map((o) => (
                       <article
                         key={o.id}
-                        className="cursor-default rounded-none border border-border bg-card p-3 shadow-none"
+                        className="group rounded-none border border-border bg-card shadow-none"
                         data-testid={`order-card-${o.order_number}`}
                       >
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <Link
-                            to={`/pedidos/${o.id}`}
-                            className="font-display text-base font-bold text-foreground underline-offset-4 hover:text-primary hover:underline focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring"
-                          >
-                            #{o.order_number}
-                          </Link>
-                          <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums text-muted-foreground">
-                            <Clock className="h-3.5 w-3.5" /> {formatTime(o.created_at)}
-                          </span>
-                        </div>
+                        <Link
+                          to={`/pedidos/${o.id}`}
+                          aria-label={`Abrir detalhes do pedido #${o.order_number}`}
+                          data-testid={`order-card-link-${o.order_number}`}
+                          className="block cursor-pointer p-3 transition-colors hover:bg-muted/40 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                        >
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <span className="font-display text-base font-bold text-foreground underline-offset-4 group-hover:text-primary group-hover:underline">
+                              #{o.order_number}
+                            </span>
+                            <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums text-muted-foreground">
+                              <Clock className="h-3.5 w-3.5" /> {formatTime(o.created_at)}
+                            </span>
+                          </div>
 
-                        <div className="mb-2 truncate text-sm font-medium text-foreground">
-                          {o.customer_name || <span className="font-normal italic text-muted-foreground">Sem cliente</span>}
-                        </div>
+                          <div className="mb-2 truncate text-sm font-medium text-foreground">
+                            {o.customer_name || <span className="font-normal italic text-muted-foreground">Sem cliente</span>}
+                          </div>
 
-                        <ul className="space-y-1 border-t border-border/70 pt-2 text-xs text-muted-foreground">
-                          {o.items.map((item, index) => (
-                            <li key={`${item.product_name}-${index}`} className="flex min-w-0 items-baseline gap-1.5">
-                              <span className="shrink-0 font-semibold tabular-nums text-foreground">{item.quantity}×</span>
-                              <span className="truncate">{item.product_name}</span>
-                            </li>
-                          ))}
-                        </ul>
+                          <ul className="space-y-1 border-t border-border/70 pt-2 text-xs text-muted-foreground">
+                            {o.items.map((item, index) => (
+                              <li key={`${item.product_name}-${index}`} className="flex min-w-0 items-baseline gap-1.5">
+                                <span className="shrink-0 font-semibold tabular-nums text-foreground">{item.quantity}×</span>
+                                <span className="truncate">{item.product_name}</span>
+                              </li>
+                            ))}
+                          </ul>
 
-                        {o.notes && (
-                          <p className="mt-2 line-clamp-2 border-l-2 border-warning pl-2 text-xs text-muted-foreground">
-                            {o.notes}
-                          </p>
-                        )}
+                          {o.notes && (
+                            <p className="mt-2 line-clamp-2 border-l-2 border-warning pl-2 text-xs text-muted-foreground">
+                              {o.notes}
+                            </p>
+                          )}
+                        </Link>
 
                         {NEXT_STATUS[o.status] && (canOrderStatus || (canKdsStatus && NEXT_STATUS[o.status] !== "delivered")) && (
                           <button
                             onClick={() => advance(o)}
                             data-testid={`advance-${o.order_number}`}
-                            className="mt-3 flex w-full cursor-pointer items-center justify-center gap-1 rounded border border-primary/30 px-2 py-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                            className="mx-3 mb-3 flex w-[calc(100%-1.5rem)] cursor-pointer items-center justify-center gap-1 rounded border border-primary/30 px-2 py-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             Avançar para {STATUS_LABEL[NEXT_STATUS[o.status]]} <ChevronRight className="h-3.5 w-3.5" />
                           </button>

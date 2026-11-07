@@ -15,6 +15,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { StatusBadge, STATUS_ICON } from "@/components/StatusBadge";
+import OrderPrintControls from "@/components/OrderPrintControls";
 import { api, formatApiError } from "@/lib/api";
 import { brl, formatDateTime, STATUS_LABEL, STATUS_ORDER } from "@/lib/format";
 import { buildAuditTimelineEvents, computeTotalDurationMs, computeUntilCurrentDurationMs, formatDurationMinutes } from "@/lib/orderTimeline";
@@ -151,6 +152,11 @@ export default function OrderDetailPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <OrderPrintControls
+            order={order}
+            restaurantId={user?.restaurant_id}
+            fallbackRestaurantName={user?.restaurant_name || ""}
+          />
           {editable && (
             <Link to={`/pedidos/${order.id}/editar`}>
               <Button variant="outline" size="sm" data-testid="edit-order-button">

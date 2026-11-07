@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, ClipboardList, History, Package, Users, LogOut, ShieldCheck, UserCircle, ChefHat, HandPlatter, Menu, Search, MessageCircle, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { LayoutDashboard, ClipboardList, History, Package, Users, LogOut, ShieldCheck, UserCircle, ChefHat, HandPlatter, Menu, Search, MessageCircle, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -21,6 +21,7 @@ const NAV_ALL = [
   { to: "/produtos", label: "Produtos", icon: Package, testid: "nav-products", permission: "products.view" },
   { to: "/clientes", label: "Clientes", icon: Users, testid: "nav-customers", permission: "customers.view" },
   { to: "/usuarios", label: "Usuários", icon: ShieldCheck, testid: "nav-users", permission: "users.view" },
+  { to: "/configuracoes", label: "Comprovantes", icon: Settings, testid: "nav-receipt-settings", permission: "users.manage" },
 ];
 
 const NAV_GROUPS = [
@@ -28,7 +29,7 @@ const NAV_GROUPS = [
   { label: "CADASTROS", items: ["/clientes", "/produtos"] },
   { label: "ATENDIMENTO", items: ["/whatsapp"] },
   { label: "HISTÓRICO", items: ["/historico"] },
-  { label: "ADMINISTRAÇÃO", items: ["/usuarios"] },
+  { label: "ADMINISTRAÇÃO", items: ["/usuarios", "/configuracoes"] },
 ];
 const restaurantNameRequests = new Map();
 
