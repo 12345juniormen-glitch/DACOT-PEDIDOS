@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
-import { UtensilsCrossed, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -12,17 +12,13 @@ import { toast } from "sonner";
 
 export default function LoginPage() {
   useDocumentTitle("Login");
-  const { user, login, handoffError, accessEndedMessage } = useAuth();
+  const { user, login } = useAuth();
   const nav = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(handoffError || accessEndedMessage || "");
+  const [error, setError] = useState("");
   const loginAttemptRef = useRef(false);
-
-  useEffect(() => {
-    setError(handoffError || accessEndedMessage || "");
-  }, [accessEndedMessage, handoffError]);
 
   const finishNavigation = useCallback(() => {
     toast.success("Bem-vindo ao DACOT");
@@ -52,31 +48,29 @@ export default function LoginPage() {
   };
 
   return (
-    <ParticleEntryTransition animationState={animationState} onExplosionComplete={finishTransition}>
+    <ParticleEntryTransition
+      animationState={animationState}
+      onExplosionComplete={finishTransition}
+      className="dark !items-start !px-5 !pb-[max(2rem,env(safe-area-inset-bottom))] !pt-[max(2rem,env(safe-area-inset-top))] md:!items-center md:!px-8 md:!py-8"
+    >
       <main
         aria-hidden={animationState !== "idle"}
-        className={`relative z-10 w-full max-w-md rounded-md border border-border/80 bg-card/95 p-6 shadow-2xl shadow-black/15 backdrop-blur-sm transition-all duration-300 sm:p-8 dark:shadow-black/40 ${
+        className={`relative z-10 w-full max-w-md border-0 bg-transparent p-0 shadow-none backdrop-blur-none transition-all duration-300 md:p-8 ${
           animationState === "idle"
             ? "scale-100 opacity-100"
             : "pointer-events-none scale-95 opacity-0"
         }`}
       >
         <div className="w-full">
-          <div className="flex items-center gap-2 mb-8">
-            <div className="w-10 h-10 rounded-md bg-primary text-primary-foreground flex items-center justify-center">
-              <UtensilsCrossed className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="font-display font-extrabold text-xl leading-none tracking-tight">DACOT</div>
-              <div className="text-[11px] text-muted-foreground mt-1">Sistema para restaurantes</div>
-            </div>
-          </div>
-          <h1 className="text-2xl font-display font-bold text-foreground">Entrar</h1>
+          <h1 className="text-[32px] font-display font-bold leading-[1.1] tracking-tight text-foreground md:text-[40px]">
+            <span className="block">Bem-vindo ao</span>
+            <span className="block whitespace-nowrap"><span className="text-[#A56D45]">DACOT</span> Pedidos</span>
+          </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Acesse o painel de pedidos do seu restaurante.
           </p>
 
-          <form onSubmit={submit} className="mt-8 space-y-4">
+          <form onSubmit={submit} className="mt-6 space-y-4 md:mt-8">
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -86,6 +80,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
+                className="h-11 bg-card md:h-9"
                 required
               />
             </div>
@@ -97,6 +92,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
+                className="h-11 bg-card md:h-9"
                 required
               />
             </div>
@@ -112,7 +108,7 @@ export default function LoginPage() {
               type="submit"
               data-testid="login-submit-button"
               disabled={loading || animationState !== "idle"}
-              className="w-full"
+              className="h-11 w-full md:h-9"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Entrar"}
             </Button>
