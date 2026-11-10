@@ -34,3 +34,14 @@ npm start
 
 O gateway deve ficar acessível somente pela rede interna da aplicação. A API
 e o gateway autenticam todas as chamadas nos dois sentidos com HMAC-SHA256.
+
+## Mídias recebidas
+
+Fotos, áudios, vídeos e documentos recebidos são baixados pelo gateway e
+guardados em `wa_media` (GridFS) no MongoDB compartilhado, até 25 MB por
+arquivo. O conteúdo não integra o evento de mensagem nem fica público: a API
+consulta o gateway com HMAC somente após verificar `whatsapp.view`, conversa,
+mensagem e restaurante. Documentos são baixados como anexo. Mídias de
+visualização única e mensagens temporárias não são armazenadas. Mensagens
+recebidas antes deste suporte não possuem arquivo para recuperar e precisam
+ser reenviadas pelo remetente.

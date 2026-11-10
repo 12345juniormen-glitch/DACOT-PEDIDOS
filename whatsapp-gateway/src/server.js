@@ -54,13 +54,28 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/health') return respond(response, 200, { status: 'ok' })
     const body = await readBody(request)
     if (!authorized(body, request.headers['x-dacot-provider-signature'])) return respond(response, 403, { detail: 'forbidden' })
-    const match = url.pathname.match(/^\/sessions\/([^/]+)(?:\/(connect|messages))?$/)
+    const match = url.pathname.match(/^\/sessions\/([^/]+)(?:\/(connect|messages|media)(?:\/([^/]+))?)?$/)
     if (!match) return respond(response, 404, { detail: 'not found' })
     const restaurantId = decodeURIComponent(match[1])
     const action = match[2]
+    const mediaId = match[3]
     if (!restaurantId || restaurantId.length > 120) return respond(response, 400, { detail: 'invalid tenant' })
 
     if (request.method === 'GET' && !action) return respond(response, 200, await sessions.status(restaurantId))
+    if (request.method === 'GET' && action === 'media' && mediaId) {
+      const media = await sessions.media.find(restaurantId, decodeURIComponent(mediaId))
+      if (!media) return respond(response, 404, { detail: 'media not found' })
+      response.writeHead(200, {
+        'Content-Type': media.mimeType,
+        'Content-Length': media.length,
+        'Content-Disposition': media.mimeType === 'application/octet-stream' ? 'attachment' : 'inline',
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+      })
+      media.stream.on('error', () => response.destroy())
+      media.stream.pipe(response)
+      return
+    }
     if (request.method === 'POST' && action === 'connect') return respond(response, 200, await sessions.connect(restaurantId))
     if (request.method === 'DELETE' && !action) return respond(response, 200, await sessions.disconnect(restaurantId))
     if (request.method === 'POST' && action === 'messages') {

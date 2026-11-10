@@ -12,6 +12,7 @@ import { formatDateTime } from "@/lib/format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/context/AuthContext";
 import { Settings } from "lucide-react";
+import { WhatsAppMedia } from "@/components/WhatsAppMedia";
 import { hasPermission } from "@/lib/permissions";
 import { toast } from "sonner";
 
@@ -208,7 +209,10 @@ export default function WhatsAppPage() {
           {pages > 1 && <div className="flex gap-2 items-center text-xs mb-2"><Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>Mais antigas</Button><span>Página {page} de {pages}</span><Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Mais recentes</Button></div>}
           <div className="flex-1 space-y-2 overflow-y-auto max-h-[55vh]">
             {messages.map((message) => <div key={message.id} className={`rounded-none p-2 text-sm max-w-[90%] break-words ${message.direction === "outbound" ? "ml-auto bg-primary/10" : "bg-muted"}`}>
-              <div>{message.type === "text" ? message.text : "Mensagem não suportada nesta versão"}</div>
+              <div>{message.type === "text" ? message.text
+                : ["image", "audio", "video", "document"].includes(message.type)
+                  ? <WhatsAppMedia conversationId={selectedId} message={message} />
+                  : "Mensagem não suportada nesta versão"}</div>
               <div className="text-[11px] text-muted-foreground mt-1">{formatDateTime(message.created_at)} · {message.status}</div>
             </div>)}
           </div>

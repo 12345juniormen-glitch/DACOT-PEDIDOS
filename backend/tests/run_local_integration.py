@@ -191,6 +191,14 @@ class LocalHub(BaseHTTPRequestHandler):
             if not self._provider_authorized(body):
                 self.send_error(403)
                 return
+            if "/media/" in self.path:
+                content = b"\x89PNG\r\n\x1a\nmedia-test"
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+                return
             tenant = self.path.removeprefix("/sessions/")
             self._json(200, self.server.provider_sessions.get(tenant, {
                 "state": "disconnected", "connected": False, "qr_data_url": None, "phone": None,

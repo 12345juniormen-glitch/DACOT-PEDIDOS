@@ -6,6 +6,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys'
 import QRCode from 'qrcode'
 import { createMongoAuthState } from './auth-state.js'
+import { MediaStore, mediaDetails } from './media.js'
 
 const STATUS_MAP = new Map([
   [WAMessageStatus.SERVER_ACK, 'sent'],
@@ -52,10 +53,12 @@ export class SessionManager {
     this.logger = logger
     this.socketFactory = socketFactory
     this.sessions = new Map()
+    this.media = new MediaStore(db, logger)
   }
 
   async start() {
     await this.sessionsCollection.createIndex({ restaurant_id: 1 }, { unique: true })
+    await this.media.start()
     const enabled = await this.sessionsCollection.find({ enabled: true }, { projection: { restaurant_id: 1 } }).toArray()
     for (const record of enabled) {
       this.connect(record.restaurant_id).catch((error) => {
@@ -125,7 +128,7 @@ export class SessionManager {
       this.logger.warn({ restaurant_id: restaurantId, error: error.message }, 'connection update failed')
     }))
     socket.ev.on('messages.upsert', (event) => this.handleMessages(
-      restaurantId, event,
+      restaurantId, socket, event,
     ).catch((error) => {
       this.logger.warn({ restaurant_id: restaurantId, error: error.message }, 'incoming message handling failed')
     }))
@@ -174,7 +177,7 @@ export class SessionManager {
       }
   }
 
-  async handleMessages(restaurantId, { messages, type }) {
+  async handleMessages(restaurantId, socket, { messages, type }) {
       if (type !== 'notify') return
       for (const message of messages) {
         if (message.key?.fromMe || !message.key?.id) continue
@@ -182,14 +185,20 @@ export class SessionManager {
         const phone = phoneFromKey(message.key)
         if (!phone) continue
         const text = extractText(message.message)
+        const media = mediaDetails(message)
+        const mediaAvailable = media
+          ? await this.media.save(restaurantId, message.key.id, message, socket, media)
+          : false
         await this.outbox.enqueue({
           event: 'message.received',
           restaurant_id: restaurantId,
           external_id: message.key.id,
           phone,
           profile_name: String(message.pushName || '').slice(0, 120) || null,
-          message_type: text == null ? 'unsupported' : 'text',
-          text: text == null ? null : String(text).slice(0, 4096),
+          message_type: media?.kind || (text == null ? 'unsupported' : 'text'),
+          text: media?.caption || (text == null ? null : String(text).slice(0, 4096)),
+          media_available: mediaAvailable,
+          file_name: media?.fileName || null,
           timestamp: messageTimestamp(message.messageTimestamp),
         })
       }

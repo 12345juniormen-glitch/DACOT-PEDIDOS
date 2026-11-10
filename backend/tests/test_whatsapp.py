@@ -53,12 +53,14 @@ def set_provider_state(tenant, state="connected"):
     assert response.status_code == 200, response.text
 
 
-def provider_event(tenant, phone="5511999991111", text="Olá", message_id=None, name="Ana", secret=None):
+def provider_event(tenant, phone="5511999991111", text="Olá", message_id=None, name="Ana", secret=None,
+                   message_type="text", media_available=False, file_name=None):
     payload = {
         "event": "message.received", "restaurant_id": tenant,
         "external_id": message_id or "baileys." + uuid.uuid4().hex,
-        "phone": phone, "profile_name": name, "message_type": "text",
-        "text": text, "timestamp": datetime.now(timezone.utc).isoformat(),
+        "phone": phone, "profile_name": name, "message_type": message_type,
+        "text": text, "media_available": media_available, "file_name": file_name,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     raw = json.dumps(payload, separators=(",", ":")).encode()
     signature = "sha256=" + hmac.new(
@@ -128,6 +130,25 @@ def test_inbound_dedup_customer_lookup_and_tenant_isolation():
     assert len(messages["items"]) == 1 and messages["items"][0]["text"] == "Olá"
     assert call("GET", f"/whatsapp/conversations/{conversation['id']}/messages", other).status_code == 404
     assert not any(item["phone"] == phone for item in call("GET", "/whatsapp/conversations", other).json())
+
+
+def test_inbound_media_is_tenant_scoped_and_requires_whatsapp_view():
+    tenant_a, tenant_b = tenant_id(), tenant_id()
+    viewer = session(tenant_a, "waiter")
+    other = session(tenant_b, "waiter")
+    kitchen = session(tenant_a, "kitchen")
+    assert provider_event(tenant_a, message_type="image", media_available=True,
+                          message_id="image-" + uuid.uuid4().hex, text="Foto do pedido").status_code == 200
+    conversation = call("GET", "/whatsapp/conversations", viewer).json()[0]
+    message = call("GET", f"/whatsapp/conversations/{conversation['id']}/messages", viewer).json()["items"][0]
+    assert message["type"] == "image" and message["media_available"] is True
+    url = f"/whatsapp/conversations/{conversation['id']}/messages/{message['id']}/media"
+    media = call("GET", url, viewer)
+    assert media.status_code == 200 and media.headers["content-type"].startswith("image/png")
+    assert media.content.startswith(b"\x89PNG")
+    assert call("GET", url, other).status_code == 404
+    assert call("GET", url, kitchen).status_code == 403
+    assert call("GET", url.replace(message["id"], uuid.uuid4().hex), viewer).status_code == 404
 
 
 def test_permanent_customer_delete_archives_whatsapp_and_preserves_order_history():

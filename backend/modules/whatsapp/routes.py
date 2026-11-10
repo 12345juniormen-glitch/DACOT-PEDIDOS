@@ -17,6 +17,7 @@ from modules.whatsapp.provider import (
     connect as provider_connect,
     connection_status,
     disconnect as provider_disconnect,
+    media_stream,
     send_text,
     verify_provider_signature,
 )
@@ -29,7 +30,8 @@ provider_router = APIRouter(prefix="/whatsapp/provider", tags=["whatsapp-provide
 
 def _message_out(doc):
     return {key: doc.get(key) for key in (
-        "id", "conversation_id", "direction", "external_id", "type", "text", "status", "created_at"
+        "id", "conversation_id", "direction", "external_id", "type", "text", "status", "created_at",
+        "media_available", "file_name",
     )}
 
 
@@ -47,6 +49,8 @@ class ProviderEvent(BaseModel):
     profile_name: str | None = Field(default=None, max_length=120)
     message_type: str | None = Field(default=None, max_length=40)
     text: str | None = Field(default=None, max_length=4096)
+    media_available: bool = False
+    file_name: str | None = Field(default=None, max_length=120)
     status: Literal["sent", "delivered", "read", "failed"] | None = None
     timestamp: datetime | None = None
 
@@ -104,12 +108,15 @@ async def receive_provider_event(
         upsert=True,
         return_document=ReturnDocument.AFTER,
     )
-    supported = event.message_type == "text"
+    message_type = event.message_type if event.message_type in {"text", "image", "audio", "video", "document"} else "unsupported"
     doc = {
         "id": str(uuid.uuid4()), "restaurant_id": event.restaurant_id,
         "conversation_id": conversation["id"], "direction": "inbound",
-        "external_id": event.external_id, "type": "text" if supported else "unsupported",
-        "text": event.text if supported else None, "status": "received", "created_at": at_iso,
+        "external_id": event.external_id, "type": message_type,
+        "text": event.text if message_type != "unsupported" else None,
+        "media_available": event.media_available if message_type in {"image", "audio", "video", "document"} else False,
+        "file_name": event.file_name if message_type == "document" else None,
+        "status": "received", "created_at": at_iso,
     }
     try:
         await db.wa_messages.insert_one(doc)
@@ -184,6 +191,20 @@ async def messages(conversation_id: str, tenant: Tenant = Depends(require_permis
     docs = await get_db().wa_messages.find(query, {"_id": 0}).sort("created_at", -1).skip((page - 1) * 50).limit(50).to_list(50)
     return {"items": [_message_out(doc) for doc in reversed(docs)],
             "page": page, "pages": (total + 49) // 50, "total": total}
+
+
+@router.get("/conversations/{conversation_id}/messages/{message_id}/media")
+async def message_media(conversation_id: str, message_id: str,
+                        tenant: Tenant = Depends(require_permissions("whatsapp.view"))):
+    await _conversation(tenant, conversation_id)
+    message = await get_db().wa_messages.find_one({
+        "restaurant_id": tenant.restaurant_id, "conversation_id": conversation_id,
+        "id": message_id, "media_available": True,
+        "type": {"$in": ["image", "audio", "video", "document"]},
+    }, {"external_id": 1})
+    if not message:
+        raise HTTPException(404, "Mídia não disponível")
+    return await media_stream(tenant.restaurant_id, message["external_id"])
 
 
 @router.post("/conversations/{conversation_id}/read")
