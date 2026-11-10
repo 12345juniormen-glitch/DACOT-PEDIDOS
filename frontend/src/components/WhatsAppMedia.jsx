@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { X } from "lucide-react";
 import { Button } from "./ui/button";
+import { VoiceMessageBubble } from "./VoiceMessageBubble";
 import { api } from "../lib/api";
 
 export function WhatsAppMedia({ conversationId, message }) {
@@ -9,6 +12,7 @@ export function WhatsAppMedia({ conversationId, message }) {
   const [url, setUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const endpoint = `/whatsapp/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(message.id)}/media`;
 
   const download = (fileUrl = url) => {
@@ -69,8 +73,27 @@ export function WhatsAppMedia({ conversationId, message }) {
   </div>;
 
   return <div ref={holder} className="min-w-0">
-    {url && message.type === "image" && <img src={url} alt="Foto recebida" className="max-h-80 max-w-full object-contain" />}
-    {url && message.type === "audio" && <audio controls src={url} className="max-w-full" aria-label="Áudio recebido" />}
+    {url && message.type === "image" && <>
+      <button type="button" aria-label="Ampliar foto" onClick={() => setPreviewOpen(true)} className="block max-w-full cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+        <img src={url} alt="Foto recebida" className="max-h-80 max-w-full object-contain" />
+      </button>
+      <DialogPrimitive.Root open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/90" />
+          <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 outline-none">
+            <DialogPrimitive.Title className="sr-only">Foto ampliada</DialogPrimitive.Title>
+            <DialogPrimitive.Description className="sr-only">Visualização ampliada da foto recebida</DialogPrimitive.Description>
+            <img src={url} alt="Foto recebida ampliada" className="max-h-[85dvh] max-w-[calc(100vw-2rem)] object-contain" />
+            <DialogPrimitive.Close asChild>
+              <button type="button" aria-label="Fechar foto ampliada" className="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-sm bg-background/90 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </DialogPrimitive.Close>
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
+    </>}
+    {url && message.type === "audio" && <VoiceMessageBubble src={url} />}
     {url && message.type === "video" && <video controls src={url} className="max-h-96 max-w-full" aria-label="Vídeo recebido" />}
     {message.type === "document" && <div className="break-all">{message.file_name || "Documento"}</div>}
     {message.type === "document" && url && <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => download()}>Baixar documento</Button>}

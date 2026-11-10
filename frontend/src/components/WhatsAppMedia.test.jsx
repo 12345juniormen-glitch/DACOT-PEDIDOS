@@ -47,6 +47,15 @@ describe("WhatsAppMedia", () => {
     expect(api.get).not.toHaveBeenCalled();
   });
 
+  test("amplia a foto ao clicar e fecha com Escape", async () => {
+    await act(async () => root.render(<WhatsAppMedia conversationId="conversa-1" message={{ id: "msg-1", type: "image", media_available: true }} />));
+    await act(async () => container.querySelector('[aria-label="Ampliar foto"]').click());
+    expect(document.querySelector('[role="dialog"] img').alt).toBe("Foto recebida ampliada");
+    await act(async () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(api.get).toHaveBeenCalledTimes(1);
+  });
+
   test("documento é carregado sob demanda", async () => {
     jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     await act(async () => root.render(<WhatsAppMedia conversationId="conversa-1" message={{ id: "msg-3", type: "document", media_available: true, file_name: "cardapio.pdf" }} />));
