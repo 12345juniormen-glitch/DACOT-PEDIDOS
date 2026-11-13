@@ -19,6 +19,7 @@ from core.db import get_db
 from core.deps import Tenant, require_any_permission, require_permissions
 from core.money import cents_to_reais, reais_to_cents
 from modules.whatsapp.service import notify_order
+from modules.orders.inventory_outbox import make_order_snapshot, pending_outbox
 
 
 OrderStatus = Literal["new", "in_preparation", "ready", "delivered", "cancelled"]
@@ -444,8 +445,12 @@ async def create_order(payload: OrderCreateInput, background_tasks: BackgroundTa
         "created_at": now,
         "updated_at": now,
         "created_by": tenant.user_id,
+        "integration_revision": 1,
     }
     doc["events"] = [_order_event(tenant, doc["id"], "created", None, "new", now)]
+    snapshot = make_order_snapshot(tenant, doc, 1, now)
+    if snapshot:
+        doc["inventory_outbox"] = [pending_outbox(snapshot)]
     await db.orders.insert_one(doc)
     background_tasks.add_task(notify_order, doc, "created")
     return _to_out(doc)
@@ -499,9 +504,21 @@ async def update_order(order_id: str, payload: OrderUpdateInput, tenant: Tenant 
         # on that to time how long an order has been in_preparation/ready. Editing an
         # order's content is not a status change.
     }
+    occurred_at = datetime.now(timezone.utc).isoformat()
+    current_revision = int(existing.get("integration_revision", 0))
+    next_revision = current_revision + 1
+    next_order = {**existing, **updates}
+    snapshot = make_order_snapshot(tenant, next_order, next_revision, occurred_at)
+    updates["integration_revision"] = next_revision
+    atomic_filter = {"id": order_id, "restaurant_id": tenant.restaurant_id, "status": existing["status"],
+                     **({"integration_revision": current_revision} if "integration_revision" in existing
+                        else {"integration_revision": {"$exists": False}})}
+    push_updates = {"events": _order_event(tenant, order_id, "updated", existing["status"], existing["status"], occurred_at)}
+    if snapshot:
+        push_updates["inventory_outbox"] = pending_outbox(snapshot)
     updated = await db.orders.find_one_and_update(
-        {"id": order_id, "restaurant_id": tenant.restaurant_id, "status": existing["status"]},
-        {"$set": updates, "$push": {"events": _order_event(tenant, order_id, "updated", existing["status"], existing["status"], datetime.now(timezone.utc).isoformat())}},
+        atomic_filter,
+        {"$set": updates, "$push": push_updates},
         return_document=True,
         projection={"_id": 0, "events": 0},
     )
@@ -534,9 +551,20 @@ async def change_status(order_id: str, payload: OrderStatusInput, tenant: Tenant
     if target == "delivered":
         updates["delivered_at"] = updates["updated_at"]
 
+    current_revision = int(existing.get("integration_revision", 0))
+    next_revision = current_revision + 1
+    next_order = {**existing, **updates}
+    snapshot = make_order_snapshot(tenant, next_order, next_revision, updates["updated_at"])
+    updates["integration_revision"] = next_revision
+    atomic_filter = {"id": order_id, "restaurant_id": tenant.restaurant_id, "status": current,
+                     **({"integration_revision": current_revision} if "integration_revision" in existing
+                        else {"integration_revision": {"$exists": False}})}
+    push_updates = {"events": _order_event(tenant, order_id, "status_changed", current, target, updates["updated_at"])}
+    if snapshot:
+        push_updates["inventory_outbox"] = pending_outbox(snapshot)
     updated = await db.orders.find_one_and_update(
-        {"id": order_id, "restaurant_id": tenant.restaurant_id, "status": current},
-        {"$set": updates, "$push": {"events": _order_event(tenant, order_id, "status_changed", current, target, updates["updated_at"])}},
+        atomic_filter,
+        {"$set": updates, "$push": push_updates},
         return_document=True,
         projection={"_id": 0, "events": 0},
     )

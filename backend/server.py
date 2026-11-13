@@ -12,6 +12,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 import logging  # noqa: E402
 import os  # noqa: E402
+import asyncio  # noqa: E402
 
 from fastapi import APIRouter, FastAPI  # noqa: E402
 from starlette.middleware.cors import CORSMiddleware  # noqa: E402
@@ -24,6 +25,7 @@ from modules.analytics.routes import router as analytics_router  # noqa: E402
 from modules.customers.routes import router as customers_router  # noqa: E402
 from modules.handoff.routes import compat_router, router as handoff_router  # noqa: E402
 from modules.orders.routes import router as orders_router  # noqa: E402
+from modules.orders.inventory_outbox import run_outbox, validate_configuration  # noqa: E402
 from modules.products.routes import router as products_router  # noqa: E402
 from modules.provisioning.routes import router as provisioning_router  # noqa: E402
 from modules.whatsapp.routes import provider_router as whatsapp_provider_router, router as whatsapp_router  # noqa: E402
@@ -34,6 +36,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("dacot")
 
 app = FastAPI(title="DACOT API", version="0.1.0")
+_inventory_outbox_task: asyncio.Task | None = None
 
 # All routes under /api
 api_router = APIRouter(prefix="/api")
@@ -97,9 +100,18 @@ async def startup():
     _ = get_db()
     await ensure_indexes()
     await seed_admin_and_restaurant()
+    if validate_configuration():
+        global _inventory_outbox_task
+        _inventory_outbox_task = asyncio.create_task(run_outbox(get_db()))
     logger.info("DACOT backend ready.")
 
 
 @app.on_event("shutdown")
 async def shutdown():
+    if _inventory_outbox_task is not None:
+        _inventory_outbox_task.cancel()
+        try:
+            await _inventory_outbox_task
+        except asyncio.CancelledError:
+            pass
     await close_db()

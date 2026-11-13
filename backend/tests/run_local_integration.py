@@ -140,13 +140,17 @@ class LocalHub(BaseHTTPRequestHandler):
                 self.send_error(403)
                 return
             tenant = parts[3]
+            if tenant == "e" * 24:
+                self.send_error(404)
+                return
             try:
                 request = json.loads(body)
                 subject = request["subject"]
             except (ValueError, KeyError, TypeError):
                 self.send_error(400)
                 return
-            self._json(200, {"active": self.server.access_states.get((tenant, subject), tenant != "0" * 24)})
+            default_active = tenant not in {"0" * 24, "f" * 24}
+            self._json(200, {"active": self.server.access_states.get((tenant, subject), default_active)})
             return
         if self.path.startswith("/test/provider/"):
             if self.headers.get("X-Test-Control") != self.server.test_control:

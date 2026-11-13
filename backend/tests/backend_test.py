@@ -141,12 +141,13 @@ class TestHandoffSession:
         assert exchange(sign_handoff(ALPHA, exp=now - 10, iat=now - 100, nbf=now - 100)).status_code == 401
 
     def test_inactive_tenant_module_rejected(self):
-        r = exchange(sign_handoff("inactive-t1", "admin"))
+        r = exchange(sign_handoff("f" * 24, "admin"))
         assert r.status_code == 403, r.text[:200]
 
     def test_unknown_tenant_rejected(self):
-        r = exchange(sign_handoff("unknown-t1", "admin"))
-        assert r.status_code in (403, 404), r.text[:200]
+        r = exchange(sign_handoff("e" * 24, "admin"))
+        # The module fails closed with 503 when the Hub does not resolve a tenant.
+        assert r.status_code in (403, 404, 503), r.text[:200]
 
 
 # ---------------- Cross-tenant isolation ----------------

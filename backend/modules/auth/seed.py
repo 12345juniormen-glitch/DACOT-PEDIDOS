@@ -121,6 +121,10 @@ async def ensure_indexes() -> None:
     await db.orders.create_index([("restaurant_id", 1), ("customer_id", 1), ("created_at", -1)])
     await db.orders.create_index([("restaurant_id", 1), ("items.product_id", 1), ("created_at", -1)])
     await db.orders.create_index([("restaurant_id", 1), ("order_number", 1)], unique=True)
+    await db.orders.create_index([
+        ("inventory_outbox.state", 1), ("inventory_outbox.next_attempt_at", 1),
+        ("inventory_outbox.lease_until", 1),
+    ])
     await db.wa_conversations.create_index([("restaurant_id", 1), ("phone", 1)], unique=True)
     await db.wa_conversations.create_index([("restaurant_id", 1), ("id", 1)], unique=True)
     await db.wa_conversations.create_index([("restaurant_id", 1), ("last_message_at", -1)])
